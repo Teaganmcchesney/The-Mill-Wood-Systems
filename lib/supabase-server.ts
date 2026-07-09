@@ -1,14 +1,14 @@
-import { cookies, type CookieOptions } from "next/headers";
+import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-
-type CookieToSet = {
-  name: string;
-  value: string;
-  options: CookieOptions;
-};
 
 export function createClient() {
   const cookieStore = cookies();
+
+  type CookieToSet = {
+    name: string;
+    value: string;
+    options: Parameters<typeof cookieStore.set>[2];
+  };
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

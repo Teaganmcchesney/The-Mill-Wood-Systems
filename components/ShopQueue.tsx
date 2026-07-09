@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import type { ProductionLine, Profile } from "@/lib/types";
 
+type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
+type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
+
 type QueueWall = {
   id: string;
   wall_id: string;
@@ -15,8 +18,8 @@ type QueueWall = {
   area_sqft: number;
   lineal_feet: number;
   production_line_id: string;
-  pdf_pages: { page_number: number; image_url: string } | null;
-  projects: { name: string; code: string } | null;
+  pdf_pages: JoinedPage;
+  projects: JoinedProject;
 };
 
 export function ShopQueue({
@@ -72,6 +75,8 @@ function WallCard({ wall, profile }: { wall: QueueWall; profile: Profile }) {
   const router = useRouter();
   const x = useMotionValue(0);
   const background = useTransform(x, [0, 180], ["#ffffff", "#dcfce7"]);
+  const page = firstJoined(wall.pdf_pages);
+  const project = firstJoined(wall.projects);
 
   async function completeWall() {
     const supabase = createClient();
@@ -94,9 +99,9 @@ function WallCard({ wall, profile }: { wall: QueueWall; profile: Profile }) {
     >
       <div className="flex gap-5">
         <div className="aspect-[8.5/11] w-40 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-          {wall.pdf_pages?.image_url ? (
+          {page?.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={wall.pdf_pages.image_url} alt={`Drawing page ${wall.pdf_pages.page_number}`} className="h-full w-full object-cover" />
+            <img src={page.image_url} alt={`Drawing page ${page.page_number}`} className="h-full w-full object-cover" />
           ) : (
             <div className="grid h-full place-items-center p-4 text-center font-bold text-steel">No drawing</div>
           )}
@@ -104,7 +109,7 @@ function WallCard({ wall, profile }: { wall: QueueWall; profile: Profile }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-lg font-bold text-steel">{wall.projects?.code} / {wall.level}</p>
+              <p className="text-lg font-bold text-steel">{project?.code} / {wall.level}</p>
               <h2 className="text-4xl font-black text-ink">{wall.wall_id}</h2>
             </div>
             <span className="rounded-md bg-shop px-4 py-2 text-lg font-black text-ink">{wall.wall_type}</span>
@@ -132,4 +137,9 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-3xl font-black text-ink">{value}</p>
     </div>
   );
+}
+
+function firstJoined<T>(value: T | T[] | null) {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
 }

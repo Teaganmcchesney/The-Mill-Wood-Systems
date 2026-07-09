@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background: #f3f5f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f3f5f7;
+  color: #14213d;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.touch-target {
+  min-height: 56px;
+}

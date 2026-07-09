@@ -3,19 +3,21 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { ProductionLine } from "@/lib/types";
 
+type JoinedLine = { name: string } | { name: string }[] | null;
+
 type Completion = {
   wall_type: string;
   lineal_feet: number;
   production_line_id: string;
   completed_at: string;
-  production_lines: { name: string } | null;
+  production_lines: JoinedLine;
 };
 
 type WallSummary = {
   wall_type: string;
   lineal_feet: number;
   status: string;
-  production_lines: { name: string } | null;
+  production_lines: JoinedLine;
 };
 
 export function DashboardCharts({
@@ -34,10 +36,10 @@ export function DashboardCharts({
   const weekFeet = completions.reduce((sum, item) => sum + Number(item.lineal_feet), 0);
   const remainingFeet = walls.filter((wall) => wall.status !== "complete").reduce((sum, wall) => sum + Number(wall.lineal_feet), 0);
   const byType = groupBy(completions, (item) => item.wall_type);
-  const byLine = groupBy(completions, (item) => item.production_lines?.name ?? "Unassigned");
+  const byLine = groupBy(completions, (item) => lineName(item.production_lines));
   const remainingByLine = groupBy(
     walls.filter((wall) => wall.status !== "complete"),
-    (item) => item.production_lines?.name ?? "Unassigned"
+    (item) => lineName(item.production_lines)
   );
 
   return (
@@ -112,4 +114,9 @@ function groupBy<T>(items: T[], getName: (item: T) => string) {
     map.set(key, (map.get(key) ?? 0) + Number((item as { lineal_feet: number }).lineal_feet));
   });
   return Array.from(map, ([name, linealFeet]) => ({ name, linealFeet }));
+}
+
+function lineName(line: JoinedLine) {
+  if (!line) return "Unassigned";
+  return Array.isArray(line) ? line[0]?.name ?? "Unassigned" : line.name;
 }

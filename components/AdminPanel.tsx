@@ -6,13 +6,15 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import type { PdfPage, ProductionLine, Project, WallPanel } from "@/lib/types";
 
-type WallType = "Sheathed" | "Interior" | "Blocked Sheathed" | "Blocked Interior";
+type WallType = "Interior" | "Blocked Interior" | "Sheathed" | "Blocked Sheathed";
+
+const WALL_TYPES: WallType[] = ["Interior", "Blocked Interior", "Sheathed", "Blocked Sheathed"];
 
 type WallForm = {
   id?: string;
   project_id: string;
   wall_id: string;
-  wall_type: string;
+  wall_type: WallType;
   level: string;
   area_sqft: string;
   lineal_feet: string;
@@ -226,7 +228,7 @@ export function AdminPanel({
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Field label="Wall ID" value={form.wall_id} onChange={(value) => setForm({ ...form, wall_id: value })} />
-          <Field label="Wall type" value={form.wall_type} onChange={(value) => setForm({ ...form, wall_type: value })} />
+          <WallTypeField value={form.wall_type} onChange={(value) => setForm({ ...form, wall_type: value })} />
           <Field label="Level" value={form.level} onChange={(value) => setForm({ ...form, level: value })} />
           <Field label="Area" value={form.area_sqft} onChange={(value) => setForm({ ...form, area_sqft: value })} type="number" />
           <Field label="Lineal feet" value={form.lineal_feet} onChange={(value) => setForm({ ...form, lineal_feet: value })} type="number" />
@@ -284,6 +286,17 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
   );
 }
 
+function WallTypeField({ value, onChange }: { value: WallType; onChange: (value: WallType) => void }) {
+  return (
+    <label className="grid gap-2 text-lg font-bold text-ink">
+      Wall type
+      <select className="touch-target rounded-md border border-slate-300 px-4" value={value} onChange={(event) => onChange(event.target.value as WallType)}>
+        {WALL_TYPES.map((wallType) => <option key={wallType} value={wallType}>{wallType}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function emptyForm(projectId: string, lineId: string): WallForm {
   return {
     project_id: projectId,
@@ -303,7 +316,7 @@ function toForm(wall: WallPanel): WallForm {
     id: wall.id,
     project_id: wall.project_id,
     wall_id: wall.wall_id,
-    wall_type: wall.wall_type,
+    wall_type: toWallType(wall.wall_type),
     level: wall.level,
     area_sqft: String(wall.area_sqft),
     lineal_feet: String(wall.lineal_feet),
@@ -311,6 +324,10 @@ function toForm(wall: WallPanel): WallForm {
     production_line_id: wall.production_line_id,
     sort_order: String(wall.sort_order)
   };
+}
+
+function toWallType(value: string): WallType {
+  return WALL_TYPES.includes(value as WallType) ? value as WallType : "Interior";
 }
 
 function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: ProductionLine[]; onDone: () => void }) {
@@ -595,12 +612,12 @@ function hasExteriorSheathing(text: string) {
 
 function hasHorizontalBlocking(text: string) {
   const lower = text.toLowerCase();
-  if (/(?:no|without)\s+(?:horizontal\s+)?block(?:ing)?/i.test(lower)) return false;
-  if (/horizontal\s+(?:row\s+of\s+)?block(?:ing)?/i.test(lower)) return true;
-  if (/(?:row|course|line)\s+of\s+block(?:ing)?/i.test(lower)) return true;
-  if (/\b(?:blocking|block)\b.*\b(?:horizontal|horiz\.?|row|course)\b/i.test(lower)) return true;
-  if (/\b(?:horizontal|horiz\.?)\b.*\b(?:blocking|block)\b/i.test(lower)) return true;
-  return /material\s+list.*\b(?:blocking|block)\b/i.test(lower);
+  if (/(?:no|without)\s+(?:horizontal\s+)?(?:block|blocking|blk|blkg)/i.test(lower)) return false;
+  if (/horizontal\s+(?:row\s+of\s+)?(?:block|blocking|blk|blkg)/i.test(lower)) return true;
+  if (/(?:row|course|line)\s+of\s+(?:block|blocking|blk|blkg)/i.test(lower)) return true;
+  if (/\b(?:blocking|block|blk|blkg)\b.*\b(?:horizontal|horiz\.?|row|course)\b/i.test(lower)) return true;
+  if (/\b(?:horizontal|horiz\.?)\b.*\b(?:blocking|block|blk|blkg)\b/i.test(lower)) return true;
+  return /material\s+list.*\b(?:blocking|block|blk|blkg)\b/i.test(lower);
 }
 
 function lineForWallType(lines: ProductionLine[], wallType: WallType) {

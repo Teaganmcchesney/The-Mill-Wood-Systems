@@ -33,12 +33,15 @@ export function ShopQueue({
   activeLineId: string;
   walls: QueueWall[];
 }) {
+  const activeWall = walls[0] ?? null;
+  const nextWalls = walls.slice(1, 6);
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-lg font-bold text-steel">Production queue</p>
-          <h1 className="text-4xl font-black text-ink">Walls ready for build</h1>
+          <h1 className="text-4xl font-black text-ink">Current wall drawing</h1>
         </div>
         <div className="flex gap-2 overflow-x-auto rounded-md bg-white p-2 shadow-touch">
           {lines.map((line) => (
@@ -55,26 +58,37 @@ export function ShopQueue({
         </div>
       </div>
 
-      {walls.length === 0 ? (
+      {activeWall ? (
+        <>
+          <ActiveWall wall={activeWall} profile={profile} remainingCount={walls.length} />
+          {nextWalls.length ? (
+            <section className="rounded-md bg-white p-5 shadow-touch">
+              <h2 className="text-2xl font-black text-ink">Coming up next</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {nextWalls.map((wall) => (
+                  <div key={wall.id} className="rounded-md bg-slate-100 p-4">
+                    <p className="text-2xl font-black text-ink">{wall.wall_id}</p>
+                    <p className="text-lg font-bold text-steel">{wall.wall_type} / {wall.lineal_feet.toFixed(1)} LF</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : (
         <section className="rounded-md bg-white p-10 text-center shadow-touch">
           <h2 className="text-3xl font-black text-ink">No walls waiting on this line</h2>
           <p className="mt-2 text-xl text-steel">Switch lines or check back after admin assigns more work.</p>
         </section>
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {walls.map((wall) => (
-            <WallCard key={wall.id} wall={wall} profile={profile} />
-          ))}
-        </div>
       )}
     </div>
   );
 }
 
-function WallCard({ wall, profile }: { wall: QueueWall; profile: Profile }) {
+function ActiveWall({ wall, profile, remainingCount }: { wall: QueueWall; profile: Profile; remainingCount: number }) {
   const router = useRouter();
   const x = useMotionValue(0);
-  const background = useTransform(x, [0, 180], ["#ffffff", "#dcfce7"]);
+  const background = useTransform(x, [0, 220], ["#ffffff", "#dcfce7"]);
   const page = firstJoined(wall.pdf_pages);
   const project = firstJoined(wall.projects);
 
@@ -90,42 +104,46 @@ function WallCard({ wall, profile }: { wall: QueueWall; profile: Profile }) {
   return (
     <motion.article
       drag="x"
-      dragConstraints={{ left: 0, right: 220 }}
+      dragConstraints={{ left: 0, right: 260 }}
       style={{ x, background }}
       onDragEnd={(_, info) => {
-        if (info.offset.x > 150) completeWall();
+        if (info.offset.x > 170) completeWall();
       }}
-      className="relative overflow-hidden rounded-md border border-slate-200 p-5 shadow-touch"
+      className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
     >
-      <div className="flex gap-5">
-        <div className="aspect-[8.5/11] w-40 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-          {page?.image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={page.image_url} alt={`Drawing page ${page.page_number}`} className="h-full w-full object-cover" />
-          ) : (
-            <div className="grid h-full place-items-center p-4 text-center font-bold text-steel">No drawing</div>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-lg font-bold text-steel">{project?.code} / {wall.level}</p>
-              <h2 className="text-4xl font-black text-ink">{wall.wall_id}</h2>
-            </div>
-            <span className="rounded-md bg-shop px-4 py-2 text-lg font-black text-ink">{wall.wall_type}</span>
+      <div className="min-h-[62vh] overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+        {page?.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={page.image_url} alt={`Drawing page ${page.page_number}`} className="h-full max-h-[78vh] min-h-[62vh] w-full object-contain" />
+        ) : (
+          <div className="grid h-[62vh] place-items-center p-4 text-center text-2xl font-black text-steel">No drawing attached</div>
+        )}
+      </div>
+
+      <aside className="grid content-between gap-5">
+        <div className="grid gap-4">
+          <div>
+            <p className="text-xl font-bold text-steel">{project?.code} / {wall.level}</p>
+            <h2 className="text-6xl font-black text-ink">{wall.wall_id}</h2>
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <span className="w-fit rounded-md bg-shop px-5 py-3 text-2xl font-black text-ink">{wall.wall_type}</span>
+          <div className="grid grid-cols-2 gap-3">
             <Metric label="Lineal feet" value={wall.lineal_feet.toFixed(1)} />
             <Metric label="Area" value={`${wall.area_sqft.toFixed(0)} sf`} />
+            <Metric label="Page" value={page ? String(page.page_number) : "-"} />
+            <Metric label="Queue" value={String(remainingCount)} />
           </div>
-          <button onClick={completeWall} className="touch-target mt-5 inline-flex w-full items-center justify-center gap-3 rounded-md bg-pass px-6 py-4 text-2xl font-black text-white">
-            <CheckCircle2 size={30} /> Complete
+        </div>
+
+        <div className="grid gap-3">
+          <button onClick={completeWall} className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-pass px-6 py-5 text-3xl font-black text-white">
+            <CheckCircle2 size={34} /> Complete
           </button>
-          <p className="mt-3 flex items-center gap-2 text-lg font-bold text-steel">
-            <MoveRight size={22} /> Swipe right to complete
+          <p className="flex items-center gap-2 text-xl font-bold text-steel">
+            <MoveRight size={24} /> Swipe drawing right to complete
           </p>
         </div>
-      </div>
+      </aside>
     </motion.article>
   );
 }
@@ -133,7 +151,7 @@ function WallCard({ wall, profile }: { wall: QueueWall; profile: Profile }) {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md bg-slate-100 p-4">
-      <p className="text-sm font-bold uppercase tracking-wide text-steel">{label}</p>
+      <p className="text-sm font-bold uppercase text-steel">{label}</p>
       <p className="text-3xl font-black text-ink">{value}</p>
     </div>
   );

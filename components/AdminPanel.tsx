@@ -1,27 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileUp, Plus, Save, Trash2 } from "lucide-react";
+import { FileUp, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import type { PdfPage, ProductionLine, Project, WallPanel } from "@/lib/types";
 
 type WallType = "Interior" | "Blocked Interior" | "Sheathed" | "Blocked Sheathed";
 
-const WALL_TYPES: WallType[] = ["Interior", "Blocked Interior", "Sheathed", "Blocked Sheathed"];
-
-type WallForm = {
-  id?: string;
-  project_id: string;
-  wall_id: string;
-  wall_type: WallType;
-  level: string;
-  area_sqft: string;
-  lineal_feet: string;
-  pdf_page_id: string;
-  production_line_id: string;
-  sort_order: string;
-};
+const LEVELS = ["L1", "L2", "L3", "L4", "Roof"];
 
 type ParsedWall = {
   wallId: string;
@@ -50,16 +37,18 @@ export function AdminPanel({
 }) {
   const router = useRouter();
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
-  const [busy, setBusy] = useState("");
+  const [level, setLevel] = useState("L1");
   const [projectBusy, setProjectBusy] = useState("");
   const [projectError, setProjectError] = useState("");
   const [newProject, setNewProject] = useState({ code: "", name: "" });
-  const [form, setForm] = useState<WallForm>(() => emptyForm(projects[0]?.id ?? "", lines[0]?.id ?? ""));
   const selectedProjectId = projectId || projects[0]?.id || "";
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const projectDrawingPages = useMemo(() => pages.filter((page) => page.project_id === selectedProjectId), [pages, selectedProjectId]);
-  const projectPages = useMemo(() => pages.filter((page) => page.project_id === form.project_id), [pages, form.project_id]);
-  const selectedProjectWalls = useMemo(() => walls.filter((wall) => wall.project_id === selectedProjectId), [walls, selectedProjectId]);
+  const selectedProjectWalls = useMemo(
+    () => walls.filter((wall) => wall.project_id === selectedProjectId && wall.level === level),
+    [walls, selectedProjectId, level]
+  );
+  const projectLevels = useMemo(() => uniqueLevels(walls.filter((wall) => wall.project_id === selectedProjectId)), [walls, selectedProjectId]);
 
   async function createProject() {
     if (!newProject.code.trim() || !newProject.name.trim()) {
@@ -83,10 +72,7 @@ export function AdminPanel({
     }
 
     setNewProject({ code: "", name: "" });
-    if (data?.id) {
-      setProjectId(data.id);
-      setForm((current) => ({ ...current, project_id: data.id, pdf_page_id: "" }));
-    }
+    if (data?.id) setProjectId(data.id);
     router.refresh();
   }
 
@@ -113,32 +99,7 @@ export function AdminPanel({
     }
 
     const nextProject = projects.find((project) => project.id !== selectedProject.id);
-    const nextProjectId = nextProject?.id ?? "";
-    setProjectId(nextProjectId);
-    setForm(emptyForm(nextProjectId, lines[0]?.id ?? ""));
-    router.refresh();
-  }
-
-  async function saveWall() {
-    setBusy("Saving wall...");
-    const supabase = createClient();
-    const payload = {
-      project_id: form.project_id,
-      wall_id: form.wall_id,
-      wall_type: form.wall_type,
-      level: form.level,
-      area_sqft: Number(form.area_sqft),
-      lineal_feet: Number(form.lineal_feet),
-      pdf_page_id: form.pdf_page_id || null,
-      production_line_id: form.production_line_id,
-      sort_order: Number(form.sort_order || 0)
-    };
-    const request = form.id
-      ? supabase.from("wall_panels").update(payload).eq("id", form.id)
-      : supabase.from("wall_panels").insert(payload);
-    await request;
-    setBusy("");
-    setForm(emptyForm(form.project_id, form.production_line_id));
+    setProjectId(nextProject?.id ?? "");
     router.refresh();
   }
 
@@ -146,7 +107,7 @@ export function AdminPanel({
     <div className="grid gap-6">
       <div>
         <p className="text-lg font-bold text-steel">Admin workspace</p>
-        <h1 className="text-4xl font-black text-ink">Projects, drawings, and wall records</h1>
+        <h1 className="text-4xl font-black text-ink">Projects, drawing packages, and imported walls</h1>
       </div>
 
       <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
@@ -187,27 +148,33 @@ export function AdminPanel({
       </section>
 
       <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-2xl font-black text-ink">Drawing package</h2>
-          <select
-            className="touch-target rounded-md border border-slate-300 px-4 text-lg font-bold"
-            value={selectedProjectId}
-            disabled={!projects.length}
-            onChange={(event) => {
-              setProjectId(event.target.value);
-              setForm({ ...form, project_id: event.target.value, pdf_page_id: "" });
-            }}
-          >
-            {projects.length ? null : <option value="">Create a project first</option>}
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
-            ))}
-          </select>
+        <div className="grid gap-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+          <div>
+            <h2 className="text-2xl font-black text-ink">Drawing package</h2>
+            <p className="text-base font-bold text-steel">Choose the project and level before uploading. Wall cards are created from the PDF automatically.</p>
+          </div>
+          <label className="grid gap-2 text-lg font-bold text-ink">
+            Project
+            <select
+              className="touch-target rounded-md border border-slate-300 px-4 text-lg font-bold"
+              value={selectedProjectId}
+              disabled={!projects.length}
+              onChange={(event) => setProjectId(event.target.value)}
+            >
+              {projects.length ? null : <option value="">Create a project first</option>}
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-2 text-lg font-bold text-ink">
+            Level
+            <select className="touch-target rounded-md border border-slate-300 px-4 text-lg font-bold" value={level} onChange={(event) => setLevel(event.target.value)}>
+              {Array.from(new Set([...LEVELS, ...projectLevels])).map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
         </div>
-        <PdfUploader projectId={selectedProjectId} lines={lines} onDone={() => router.refresh()} />
-        <p className="text-base font-bold text-steel">
-          Uploads create or update wall cards only from pages that contain Panel # and Length. Blank and material-only pages are kept as drawings only.
-        </p>
+        <PdfUploader projectId={selectedProjectId} level={level} lines={lines} onDone={() => router.refresh()} />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
           {projectDrawingPages.map((page) => (
             <div key={page.id} className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
@@ -219,57 +186,23 @@ export function AdminPanel({
         </div>
       </section>
 
-      <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl font-black text-ink">{form.id ? "Edit wall panel" : "Create wall panel"}</h2>
-          <button className="touch-target inline-flex items-center gap-2 rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink" onClick={() => setForm(emptyForm(projects[0]?.id ?? "", lines[0]?.id ?? ""))}>
-            <Plus size={22} /> New
-          </button>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Field label="Wall ID" value={form.wall_id} onChange={(value) => setForm({ ...form, wall_id: value })} />
-          <WallTypeField value={form.wall_type} onChange={(value) => setForm({ ...form, wall_type: value })} />
-          <Field label="Level" value={form.level} onChange={(value) => setForm({ ...form, level: value })} />
-          <Field label="Area" value={form.area_sqft} onChange={(value) => setForm({ ...form, area_sqft: value })} type="number" />
-          <Field label="Lineal feet" value={form.lineal_feet} onChange={(value) => setForm({ ...form, lineal_feet: value })} type="number" />
-          <Field label="Sort" value={form.sort_order} onChange={(value) => setForm({ ...form, sort_order: value })} type="number" />
-          <label className="grid gap-2 text-lg font-bold text-ink">
-            Project
-            <select className="touch-target rounded-md border border-slate-300 px-4" value={form.project_id} onChange={(event) => setForm({ ...form, project_id: event.target.value, pdf_page_id: "" })}>
-              {projects.map((project) => <option key={project.id} value={project.id}>{project.code}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-2 text-lg font-bold text-ink">
-            Drawing page
-            <select className="touch-target rounded-md border border-slate-300 px-4" value={form.pdf_page_id} onChange={(event) => setForm({ ...form, pdf_page_id: event.target.value })}>
-              <option value="">No page</option>
-              {projectPages.map((page) => <option key={page.id} value={page.id}>Page {page.page_number}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-2 text-lg font-bold text-ink">
-            Production line
-            <select className="touch-target rounded-md border border-slate-300 px-4" value={form.production_line_id} onChange={(event) => setForm({ ...form, production_line_id: event.target.value })}>
-              {lines.map((line) => <option key={line.id} value={line.id}>{line.name}</option>)}
-            </select>
-          </label>
-        </div>
-        <button onClick={saveWall} className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-ink px-6 py-4 text-2xl font-black text-white">
-          <Save size={28} /> {busy || "Save wall"}
-        </button>
-      </section>
-
       <section className="grid gap-3">
-        <h2 className="text-2xl font-black text-ink">Wall records</h2>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-black text-ink">Imported wall records</h2>
+            <p className="text-lg font-bold text-steel">{selectedProject?.code ?? "Project"} / {level}</p>
+          </div>
+          <span className="rounded-md bg-white px-4 py-3 text-lg font-black text-ink shadow-touch">{selectedProjectWalls.length} walls</span>
+        </div>
         <div className="grid gap-3">
           {selectedProjectWalls.map((wall) => (
-            <button key={wall.id} className="grid rounded-md bg-white p-4 text-left shadow-touch md:grid-cols-6 md:items-center" onClick={() => setForm(toForm(wall))}>
+            <div key={wall.id} className="grid rounded-md bg-white p-4 text-left shadow-touch md:grid-cols-5 md:items-center">
               <strong className="text-2xl text-ink">{wall.wall_id}</strong>
               <span className="font-bold text-steel">{wall.wall_type}</span>
               <span className="font-bold text-steel">{wall.level}</span>
               <span className="font-bold text-steel">{wall.lineal_feet} LF</span>
               <span className="font-bold text-steel">{wall.status}</span>
-              <span className="font-bold text-steel">Edit</span>
-            </button>
+            </div>
           ))}
         </div>
       </section>
@@ -286,51 +219,7 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
   );
 }
 
-function WallTypeField({ value, onChange }: { value: WallType; onChange: (value: WallType) => void }) {
-  return (
-    <label className="grid gap-2 text-lg font-bold text-ink">
-      Wall type
-      <select className="touch-target rounded-md border border-slate-300 px-4" value={value} onChange={(event) => onChange(event.target.value as WallType)}>
-        {WALL_TYPES.map((wallType) => <option key={wallType} value={wallType}>{wallType}</option>)}
-      </select>
-    </label>
-  );
-}
-
-function emptyForm(projectId: string, lineId: string): WallForm {
-  return {
-    project_id: projectId,
-    wall_id: "",
-    wall_type: "Interior",
-    level: "L1",
-    area_sqft: "",
-    lineal_feet: "",
-    pdf_page_id: "",
-    production_line_id: lineId,
-    sort_order: "10"
-  };
-}
-
-function toForm(wall: WallPanel): WallForm {
-  return {
-    id: wall.id,
-    project_id: wall.project_id,
-    wall_id: wall.wall_id,
-    wall_type: toWallType(wall.wall_type),
-    level: wall.level,
-    area_sqft: String(wall.area_sqft),
-    lineal_feet: String(wall.lineal_feet),
-    pdf_page_id: wall.pdf_page_id ?? "",
-    production_line_id: wall.production_line_id,
-    sort_order: String(wall.sort_order)
-  };
-}
-
-function toWallType(value: string): WallType {
-  return WALL_TYPES.includes(value as WallType) ? value as WallType : "Interior";
-}
-
-function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: ProductionLine[]; onDone: () => void }) {
+function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; level: string; lines: ProductionLine[]; onDone: () => void }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -423,7 +312,7 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
         const productionLine = lineForWallType(lines, wallType);
         const wallPayload = {
           wall_type: wallType,
-          level: "L1",
+          level,
           area_sqft: 0,
           lineal_feet: pageInfo.parsed.linealFeet,
           pdf_page_id: savedPage?.id ?? null,
@@ -464,7 +353,7 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
   return (
     <div className="grid gap-3">
       <label className="touch-target inline-flex cursor-pointer items-center justify-center gap-3 rounded-md border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-5 text-xl font-black text-ink">
-        <FileUp size={28} /> {busy || "Upload PDF drawing package"}
+        <FileUp size={28} /> {busy || `Upload ${level} PDF drawing package`}
         <input
           className="sr-only"
           type="file"
@@ -613,17 +502,17 @@ function hasExteriorSheathing(text: string) {
 function hasHorizontalBlocking(text: string) {
   const lower = text.toLowerCase();
   if (/(?:no|without)\s+(?:horizontal\s+)?(?:block|blocking|blk|blkg)/i.test(lower)) return false;
-  if (/horizontal\s+(?:row\s+of\s+)?(?:block|blocking|blk|blkg)/i.test(lower)) return true;
-  if (/(?:row|course|line)\s+of\s+(?:block|blocking|blk|blkg)/i.test(lower)) return true;
-  if (/\b(?:blocking|block|blk|blkg)\b.*\b(?:horizontal|horiz\.?|row|course)\b/i.test(lower)) return true;
-  if (/\b(?:horizontal|horiz\.?)\b.*\b(?:blocking|block|blk|blkg)\b/i.test(lower)) return true;
-  return /material\s+list.*\b(?:blocking|block|blk|blkg)\b/i.test(lower);
+  return /\b(?:blocking|block|blk|blkg)\b/i.test(lower);
 }
 
 function lineForWallType(lines: ProductionLine[], wallType: WallType) {
   const wanted = wallType.includes("Sheathed") ? "sheathed" : "interior";
   const exact = lines.find((line) => normalizeLineName(line.name) === wanted);
   return exact ?? lines.find((line) => normalizeLineName(line.name).includes(wanted)) ?? lines[0];
+}
+
+function uniqueLevels(projectWalls: WallPanel[]) {
+  return Array.from(new Set(projectWalls.map((wall) => wall.level).filter(Boolean))).sort();
 }
 
 function normalizeLineName(value: string) {

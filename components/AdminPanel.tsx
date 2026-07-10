@@ -461,14 +461,25 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
   );
 }
 
-async function parsePdfPage(page: { getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }, pageNumber: number): Promise<ParsedWall> {
+async function parsePdfPage(
+  page: { getTextContent: () => Promise<{ items: unknown[] }> },
+  pageNumber: number
+): Promise<ParsedWall> {
   try {
     const textContent = await page.getTextContent();
-    const text = textContent.items.map((item) => item.str ?? "").join(" ").replace(/\s+/g, " ").trim();
+    const text = textContent.items
+      .map((item) => (isTextItem(item) ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
     return parseWallText(text, pageNumber);
   } catch {
     return fallbackWall(pageNumber);
   }
+}
+
+function isTextItem(item: unknown): item is { str: string } {
+  return typeof item === "object" && item !== null && "str" in item && typeof (item as { str?: unknown }).str === "string";
 }
 
 function parseWallText(text: string, pageNumber: number): ParsedWall {

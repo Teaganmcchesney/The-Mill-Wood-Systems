@@ -15,7 +15,7 @@ export default async function DashboardPage() {
       .select("*, production_lines(name)")
       .gte("completed_at", startOfWeekIso())
       .order("completed_at", { ascending: false }),
-    supabase.from("wall_panels").select("wall_type, lineal_feet, status, production_lines(name)"),
+    supabase.from("wall_panels").select("wall_type, lineal_feet, status, production_lines(name), projects(code, name)"),
     supabase.from("production_lines").select("*").order("sort_order")
   ]);
 

@@ -127,9 +127,8 @@ function ActiveWall({ wall, profile, remainingCount }: { wall: QueueWall; profil
             <h2 className="text-6xl font-black text-ink">{wall.wall_id}</h2>
           </div>
           <span className="w-fit rounded-md bg-shop px-5 py-3 text-2xl font-black text-ink">{wall.wall_type}</span>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Metric label="Lineal feet" value={wall.lineal_feet.toFixed(1)} />
-            <Metric label="Area" value={`${wall.area_sqft.toFixed(0)} sf`} />
             <Metric label="Page" value={page ? String(page.page_number) : "-"} />
             <Metric label="Queue" value={String(remainingCount)} />
           </div>

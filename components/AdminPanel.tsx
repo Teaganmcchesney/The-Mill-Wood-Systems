@@ -158,7 +158,7 @@ function emptyForm(projectId: string, lineId: string): WallForm {
   return {
     project_id: projectId,
     wall_id: "",
-    wall_type: "Exterior",
+    wall_type: "Sheathed",
     level: "L1",
     area_sqft: "",
     lineal_feet: "",
@@ -189,7 +189,7 @@ function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => v
   async function handleFile(file: File) {
     setBusy("Converting PDF pages...");
     const pdfjs = await import("pdfjs-dist");
- pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
     const supabase = createClient();
     const bytes = await file.arrayBuffer();
     const pdf = await pdfjs.getDocument({ data: bytes }).promise;

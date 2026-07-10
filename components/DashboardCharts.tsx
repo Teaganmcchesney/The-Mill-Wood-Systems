@@ -6,6 +6,8 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { createClient } from "@/lib/supabase-browser";
 import type { ProductionLine, ShiftManpower } from "@/lib/types";
 
+const WALL_TYPES = ["Interior", "Blocked Interior", "Sheathed", "Blocked Sheathed"];
+
 type JoinedLine = { name: string } | { name: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
 
@@ -42,7 +44,7 @@ export function DashboardCharts({
     .reduce((sum, item) => sum + Number(item.lineal_feet), 0);
   const weekFeet = completions.reduce((sum, item) => sum + Number(item.lineal_feet), 0);
   const remainingFeet = walls.filter((wall) => wall.status !== "complete").reduce((sum, wall) => sum + Number(wall.lineal_feet), 0);
-  const byType = groupBy(completions, (item) => item.wall_type);
+  const byType = allWallTypeTotals(completions);
   const byLine = groupBy(completions, (item) => lineName(item.production_lines));
   const remainingByLine = groupBy(
     walls.filter((wall) => wall.status !== "complete"),
@@ -284,6 +286,8 @@ function summarizeProjects(walls: WallSummary[]) {
 
 function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManpower[], lines: ProductionLine[]) {
   const map = new Map<string, { feet: number; keys: Set<string> }>();
+  WALL_TYPES.forEach((wallType) => map.set(wallType, { feet: 0, keys: new Set<string>() }));
+
   completions.forEach((completion) => {
     const current = map.get(completion.wall_type) ?? { feet: 0, keys: new Set<string>() };
     current.feet += Number(completion.lineal_feet);
@@ -304,7 +308,15 @@ function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManp
       }
     });
     return { name, rate: manHours > 0 ? Math.round((item.feet / manHours) * 100) / 100 : 0 };
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  });
+}
+
+function allWallTypeTotals(completions: Completion[]) {
+  const map = new Map(WALL_TYPES.map((wallType) => [wallType, 0]));
+  completions.forEach((completion) => {
+    map.set(completion.wall_type, (map.get(completion.wall_type) ?? 0) + Number(completion.lineal_feet));
+  });
+  return Array.from(map, ([name, linealFeet]) => ({ name, linealFeet }));
 }
 
 function groupBy<T>(items: T[], getName: (item: T) => string) {

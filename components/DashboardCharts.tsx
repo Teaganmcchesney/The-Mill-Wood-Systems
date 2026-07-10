@@ -48,7 +48,9 @@ export function DashboardCharts({
     (item) => lineName(item.production_lines)
   );
   const projectSummaries = summarizeProjects(walls);
-  const laborRateMap = new Map(laborRateByWallType(completions, shiftManpower, lines).map((item) => [item.name, item.rate]));
+  const laborRateMap = new Map<string, number>(
+    laborRateByWallType(completions, shiftManpower, lines).map((item): [string, number] => [item.name, item.rate])
+  );
   const wallTypeStatus = allWallTypeStatus(walls);
   const wallTypeKpis = wallTypeStatus.map((item) => ({ ...item, laborRate: laborRateMap.get(item.name) ?? 0 }));
 
@@ -177,6 +179,14 @@ type ProjectSummary = {
   completedWalls: number;
 };
 
+type WallTypeStatus = {
+  name: string;
+  completedFeet: number;
+  remainingFeet: number;
+  completedWalls: number;
+  totalWalls: number;
+};
+
 function summarizeProjects(walls: WallSummary[]) {
   const map = new Map<string, ProjectSummary>();
 
@@ -236,12 +246,10 @@ function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManp
 }
 
 function allWallTypeStatus(walls: WallSummary[]) {
-  const map = new Map(
-    WALL_TYPES.map((wallType) => [
-      wallType,
-      { name: wallType, completedFeet: 0, remainingFeet: 0, completedWalls: 0, totalWalls: 0 }
-    ])
-  );
+  const map = new Map<string, WallTypeStatus>();
+  WALL_TYPES.forEach((wallType) => {
+    map.set(wallType, { name: wallType, completedFeet: 0, remainingFeet: 0, completedWalls: 0, totalWalls: 0 });
+  });
 
   walls.forEach((wall) => {
     const current = map.get(wall.wall_type) ?? {
@@ -265,7 +273,8 @@ function allWallTypeStatus(walls: WallSummary[]) {
 }
 
 function allWallTypeTotals(completions: Completion[]) {
-  const map = new Map(WALL_TYPES.map((wallType) => [wallType, 0]));
+  const map = new Map<string, number>();
+  WALL_TYPES.forEach((wallType) => map.set(wallType, 0));
   completions.forEach((completion) => {
     map.set(completion.wall_type, (map.get(completion.wall_type) ?? 0) + Number(completion.lineal_feet));
   });

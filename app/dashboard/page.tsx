@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   const [{ data: completions }, { data: walls }, { data: lines }, { data: shiftManpower }] = await Promise.all([
     supabase
       .from("completion_logs")
-      .select("*, production_lines(name)")
+      .select("*, production_lines(name), wall_panels(projects(code, name))")
       .gte("completed_at", monthStart)
       .order("completed_at", { ascending: false }),
     supabase.from("wall_panels").select("wall_type, lineal_feet, status, production_lines(name), projects(code, name)"),

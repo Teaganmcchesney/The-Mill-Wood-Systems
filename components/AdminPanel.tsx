@@ -35,9 +35,13 @@ export function AdminPanel({
   const [busy, setBusy] = useState("");
   const [projectBusy, setProjectBusy] = useState("");
   const [projectError, setProjectError] = useState("");
+  const [draftBusy, setDraftBusy] = useState("");
+  const [draftError, setDraftError] = useState("");
   const [newProject, setNewProject] = useState({ code: "", name: "" });
   const [form, setForm] = useState<WallForm>(() => emptyForm(projects[0]?.id ?? "", lines[0]?.id ?? ""));
   const selectedProjectId = projectId || projects[0]?.id || "";
+  const projectDrawingPages = useMemo(() => pages.filter((page) => page.project_id === selectedProjectId), [pages, selectedProjectId]);
+  const projectWalls = useMemo(() => walls.filter((wall) => wall.project_id === selectedProjectId), [walls, selectedProjectId]);
   const projectPages = useMemo(() => pages.filter((page) => page.project_id === form.project_id), [pages, form.project_id]);
 
   async function createProject() {
@@ -66,6 +70,55 @@ export function AdminPanel({
       setProjectId(data.id);
       setForm((current) => ({ ...current, project_id: data.id, pdf_page_id: "" }));
     }
+    router.refresh();
+  }
+
+  async function createDraftWalls() {
+    if (!selectedProjectId) {
+      setDraftError("Choose a project first.");
+      return;
+    }
+    if (!lines.length) {
+      setDraftError("Add a production line before creating wall cards.");
+      return;
+    }
+    if (!projectDrawingPages.length) {
+      setDraftError("Upload a PDF before creating wall cards.");
+      return;
+    }
+
+    const existingPageIds = new Set(projectWalls.map((wall) => wall.pdf_page_id).filter(Boolean));
+    const pagesWithoutWall = projectDrawingPages.filter((page) => !existingPageIds.has(page.id));
+
+    if (!pagesWithoutWall.length) {
+      setDraftError("All uploaded pages already have wall cards.");
+      return;
+    }
+
+    setDraftBusy("Creating wall cards...");
+    setDraftError("");
+    const defaultLine = lines[0];
+    const supabase = createClient();
+    const { error } = await supabase.from("wall_panels").insert(
+      pagesWithoutWall.map((page) => ({
+        project_id: selectedProjectId,
+        wall_id: `PAGE-${String(page.page_number).padStart(3, "0")}`,
+        wall_type: defaultLine.name === "Interior" ? "Interior" : "Sheathed",
+        level: "L1",
+        area_sqft: 0,
+        lineal_feet: 0,
+        pdf_page_id: page.id,
+        production_line_id: defaultLine.id,
+        sort_order: page.page_number * 10
+      }))
+    );
+
+    setDraftBusy("");
+    if (error) {
+      setDraftError(error.message);
+      return;
+    }
+
     router.refresh();
   }
 
@@ -132,8 +185,16 @@ export function AdminPanel({
           </select>
         </div>
         <PdfUploader projectId={selectedProjectId} onDone={() => router.refresh()} />
+        <button
+          onClick={createDraftWalls}
+          disabled={Boolean(draftBusy) || !projectDrawingPages.length}
+          className="touch-target inline-flex items-center justify-center gap-3 rounded-md bg-shop px-6 py-4 text-xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Plus size={24} /> {draftBusy || `Create wall cards from ${projectDrawingPages.length} page${projectDrawingPages.length === 1 ? "" : "s"}`}
+        </button>
+        {draftError ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{draftError}</p> : null}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-          {pages.filter((page) => page.project_id === selectedProjectId).map((page) => (
+          {projectDrawingPages.map((page) => (
             <div key={page.id} className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={page.image_url} alt={`Page ${page.page_number}`} className="aspect-[8.5/11] w-full object-cover" />

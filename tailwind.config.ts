@@ -5,14 +5,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#14213d",
-        steel: "#516170",
-        shop: "#f7b801",
-        pass: "#2f855a",
-        alert: "#c2410c"
+        ink: "#F7EFE5",
+        steel: "#CDB9A2",
+        shop: "#F05A24",
+        pass: "#D99A4E",
+        alert: "#E25C2A",
+        millblack: "#050505",
+        millpanel: "#11100E",
+        millline: "#3A3028"
       },
       boxShadow: {
-        touch: "0 14px 30px rgba(20, 33, 61, 0.12)"
+        touch: "0 18px 40px rgba(0, 0, 0, 0.45)"
       }
     }
   },

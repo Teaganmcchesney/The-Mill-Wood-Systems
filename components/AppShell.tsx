@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ClipboardList, Factory, LogOut, Users } from "lucide-react";
+import { BarChart3, ClipboardList, Factory, FileSearch, LogOut, Users } from "lucide-react";
 import type { Profile } from "@/lib/types";
 import { SignOutButton } from "@/components/SignOutButton";
 
@@ -23,6 +23,9 @@ export function AppShell({ profile, children }: { profile: Profile | null; child
             </Link>
             <Link className="touch-target inline-flex items-center gap-2 rounded-md px-4 py-3 text-lg font-bold text-ink hover:bg-slate-100" href="/shop">
               <Factory size={24} /> Shop
+            </Link>
+            <Link className="touch-target inline-flex items-center gap-2 rounded-md px-4 py-3 text-lg font-bold text-ink hover:bg-slate-100" href="/drawings">
+              <FileSearch size={24} /> Drawings
             </Link>
             <Link className="touch-target inline-flex items-center gap-2 rounded-md px-4 py-3 text-lg font-bold text-ink hover:bg-slate-100" href="/dashboard">
               <BarChart3 size={24} /> Dashboard

@@ -19,6 +19,12 @@ type WallForm = {
   sort_order: string;
 };
 
+type ParsedWall = {
+  wallId: string;
+  wallType: "Sheathed" | "Interior";
+  linealFeet: number;
+};
+
 export function AdminPanel({
   projects,
   lines,
@@ -184,7 +190,10 @@ export function AdminPanel({
             ))}
           </select>
         </div>
-        <PdfUploader projectId={selectedProjectId} onDone={() => router.refresh()} />
+        <PdfUploader projectId={selectedProjectId} lines={lines} onDone={() => router.refresh()} />
+        <p className="text-base font-bold text-steel">
+          New uploads will try to read panel name, length, and sheathing from the PDF text. Scanned image-only PDFs may still need manual edits.
+        </p>
         <button
           onClick={createDraftWalls}
           disabled={Boolean(draftBusy) || !projectDrawingPages.length}
@@ -300,13 +309,17 @@ function toForm(wall: WallPanel): WallForm {
   };
 }
 
-function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => void }) {
+function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: ProductionLine[]; onDone: () => void }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
   async function handleFile(file: File) {
     if (!projectId) {
       setError("Choose or create a project before uploading a PDF.");
+      return;
+    }
+    if (!lines.length) {
+      setError("Add production lines before uploading a PDF.");
       return;
     }
 
@@ -329,8 +342,10 @@ function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => v
       if (projectError) throw projectError;
 
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-        setBusy(`Rendering page ${pageNumber} of ${pdf.numPages}...`);
+        setBusy(`Reading page ${pageNumber} of ${pdf.numPages}...`);
         const page = await pdf.getPage(pageNumber);
+        const parsed = await parsePdfPage(page, pageNumber);
+        const productionLine = lineForWallType(lines, parsed.wallType);
         const baseViewport = page.getViewport({ scale: 1 });
         const scale = Math.min(1.4, 1600 / Math.max(baseViewport.width, baseViewport.height));
         const viewport = page.getViewport({ scale });
@@ -340,6 +355,7 @@ function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => v
         const context = canvas.getContext("2d", { alpha: false });
         if (!context) throw new Error("The browser could not create a drawing preview.");
 
+        setBusy(`Rendering page ${pageNumber} of ${pdf.numPages}...`);
         await page.render({ canvasContext: context, viewport }).promise;
         const blob = await new Promise<Blob>((resolve, reject) => {
           canvas.toBlob((value) => {
@@ -359,11 +375,39 @@ function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => v
         if (imageUploadError) throw imageUploadError;
 
         const { data } = supabase.storage.from("drawing-pages").getPublicUrl(imagePath);
-        const { error: pageError } = await supabase.from("pdf_pages").upsert(
-          { project_id: projectId, page_number: pageNumber, image_url: data.publicUrl },
-          { onConflict: "project_id,page_number" }
-        );
+        const { data: savedPage, error: pageError } = await supabase
+          .from("pdf_pages")
+          .upsert(
+            { project_id: projectId, page_number: pageNumber, image_url: data.publicUrl },
+            { onConflict: "project_id,page_number" }
+          )
+          .select("id")
+          .single();
         if (pageError) throw pageError;
+
+        setBusy(`Creating wall card ${pageNumber} of ${pdf.numPages}...`);
+        const { data: existingWall, error: existingError } = await supabase
+          .from("wall_panels")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("wall_id", parsed.wallId)
+          .maybeSingle();
+        if (existingError) throw existingError;
+
+        if (!existingWall) {
+          const { error: wallError } = await supabase.from("wall_panels").insert({
+            project_id: projectId,
+            wall_id: parsed.wallId,
+            wall_type: parsed.wallType,
+            level: "L1",
+            area_sqft: 0,
+            lineal_feet: parsed.linealFeet,
+            pdf_page_id: savedPage?.id ?? null,
+            production_line_id: productionLine.id,
+            sort_order: pageNumber * 10
+          });
+          if (wallError) throw wallError;
+        }
       }
 
       onDone();
@@ -395,6 +439,71 @@ function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => v
       ) : null}
     </div>
   );
+}
+
+async function parsePdfPage(page: { getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }, pageNumber: number): Promise<ParsedWall> {
+  try {
+    const textContent = await page.getTextContent();
+    const text = textContent.items.map((item) => item.str ?? "").join(" ").replace(/\s+/g, " ").trim();
+    return parseWallText(text, pageNumber);
+  } catch {
+    return fallbackWall(pageNumber);
+  }
+}
+
+function parseWallText(text: string, pageNumber: number): ParsedWall {
+  const fallback = fallbackWall(pageNumber);
+  const wallId = findWallId(text) ?? fallback.wallId;
+  const linealFeet = findLengthFeet(text) ?? fallback.linealFeet;
+  const wallType = hasExteriorSheathing(text) ? "Sheathed" : "Interior";
+
+  return { wallId, linealFeet, wallType };
+}
+
+function fallbackWall(pageNumber: number): ParsedWall {
+  return {
+    wallId: `PAGE-${String(pageNumber).padStart(3, "0")}`,
+    wallType: "Interior",
+    linealFeet: 0
+  };
+}
+
+function findWallId(text: string) {
+  const patterns = [
+    /(?:panel|wall)\s*(?:name|id|mark|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9_.-]{1,30})/i,
+    /(?:^|\s)([A-Z]{1,5}[-_]?[0-9]{1,5}[A-Z]?)\s+(?:length|len\.?)/i,
+    /(?:^|\s)([A-Z]{1,5}[0-9]{1,5}[A-Z]?)(?:\s|$)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const value = match?.[1]?.replace(/[^A-Z0-9_.-]/gi, "").toUpperCase();
+    if (value && !["LENGTH", "PANEL", "WALL", "MATERIAL", "SHEATHING"].includes(value)) return value;
+  }
+
+  return null;
+}
+
+function findLengthFeet(text: string) {
+  const match = text.match(/(?:length|len\.?|wall\s*length)\s*[:=#-]?\s*(\d+(?:\.\d+)?)\s*(?:'|ft|feet)?\s*(?:[- ]\s*(\d+(?:\.\d+)?)\s*(?:\"|in|inch|inches)?)?/i);
+  if (!match) return null;
+
+  const feet = Number(match[1]);
+  const inches = match[2] ? Number(match[2]) : 0;
+  if (!Number.isFinite(feet) || !Number.isFinite(inches)) return null;
+  return Math.round((feet + inches / 12) * 100) / 100;
+}
+
+function hasExteriorSheathing(text: string) {
+  const lower = text.toLowerCase();
+  const sheathingWords = /(exterior\s+sheath|ext\.?\s+sheath|sheathing|osb|plywood|structural\s+panel)/i.test(lower);
+  const interiorOnly = /(no\s+sheath|without\s+sheath|interior\s+only)/i.test(lower);
+  return sheathingWords && !interiorOnly;
+}
+
+function lineForWallType(lines: ProductionLine[], wallType: ParsedWall["wallType"]) {
+  const wanted = wallType === "Sheathed" ? "sheathed" : "interior";
+  return lines.find((line) => line.name.toLowerCase().includes(wanted)) ?? lines[0];
 }
 
 function getErrorMessage(error: unknown) {

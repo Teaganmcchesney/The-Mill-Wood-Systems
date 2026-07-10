@@ -48,13 +48,10 @@ export function AdminPanel({
   const [busy, setBusy] = useState("");
   const [projectBusy, setProjectBusy] = useState("");
   const [projectError, setProjectError] = useState("");
-  const [draftBusy, setDraftBusy] = useState("");
-  const [draftError, setDraftError] = useState("");
   const [newProject, setNewProject] = useState({ code: "", name: "" });
   const [form, setForm] = useState<WallForm>(() => emptyForm(projects[0]?.id ?? "", lines[0]?.id ?? ""));
   const selectedProjectId = projectId || projects[0]?.id || "";
   const projectDrawingPages = useMemo(() => pages.filter((page) => page.project_id === selectedProjectId), [pages, selectedProjectId]);
-  const projectWalls = useMemo(() => walls.filter((wall) => wall.project_id === selectedProjectId), [walls, selectedProjectId]);
   const projectPages = useMemo(() => pages.filter((page) => page.project_id === form.project_id), [pages, form.project_id]);
 
   async function createProject() {
@@ -83,55 +80,6 @@ export function AdminPanel({
       setProjectId(data.id);
       setForm((current) => ({ ...current, project_id: data.id, pdf_page_id: "" }));
     }
-    router.refresh();
-  }
-
-  async function createDraftWalls() {
-    if (!selectedProjectId) {
-      setDraftError("Choose a project first.");
-      return;
-    }
-    if (!lines.length) {
-      setDraftError("Add a production line before creating wall cards.");
-      return;
-    }
-    if (!projectDrawingPages.length) {
-      setDraftError("Upload a PDF before creating wall cards.");
-      return;
-    }
-
-    const existingPageIds = new Set(projectWalls.map((wall) => wall.pdf_page_id).filter(Boolean));
-    const pagesWithoutWall = projectDrawingPages.filter((page) => !existingPageIds.has(page.id));
-
-    if (!pagesWithoutWall.length) {
-      setDraftError("All uploaded pages already have wall cards.");
-      return;
-    }
-
-    setDraftBusy("Creating wall cards...");
-    setDraftError("");
-    const defaultLine = lines[0];
-    const supabase = createClient();
-    const { error } = await supabase.from("wall_panels").insert(
-      pagesWithoutWall.map((page) => ({
-        project_id: selectedProjectId,
-        wall_id: `PAGE-${String(page.page_number).padStart(3, "0")}`,
-        wall_type: defaultLine.name === "Interior" ? "Interior" : "Sheathed",
-        level: "L1",
-        area_sqft: 0,
-        lineal_feet: 0,
-        pdf_page_id: page.id,
-        production_line_id: defaultLine.id,
-        sort_order: page.page_number * 10
-      }))
-    );
-
-    setDraftBusy("");
-    if (error) {
-      setDraftError(error.message);
-      return;
-    }
-
     router.refresh();
   }
 
@@ -199,16 +147,8 @@ export function AdminPanel({
         </div>
         <PdfUploader projectId={selectedProjectId} lines={lines} onDone={() => router.refresh()} />
         <p className="text-base font-bold text-steel">
-          New uploads read Panel #, Length, and sheathing notes from the PDF text. Each panel becomes one wall card.
+          Uploads create or update wall cards only from pages that contain Panel # and Length. Blank and material-only pages are kept as drawings only.
         </p>
-        <button
-          onClick={createDraftWalls}
-          disabled={Boolean(draftBusy) || !projectDrawingPages.length}
-          className="touch-target inline-flex items-center justify-center gap-3 rounded-md bg-shop px-6 py-4 text-xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Plus size={24} /> {draftBusy || `Create wall cards from ${projectDrawingPages.length} page${projectDrawingPages.length === 1 ? "" : "s"}`}
-        </button>
-        {draftError ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{draftError}</p> : null}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
           {projectDrawingPages.map((page) => (
             <div key={page.id} className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
@@ -350,6 +290,10 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
       }
 
       const hasPanelPages = parsedPages.some((page) => page.parsed.isPanelPage);
+      if (!hasPanelPages) {
+        throw new Error("No panel pages were found. The importer needs pages with text like Panel # and Length.");
+      }
+
       const { error: pdfUploadError } = await supabase.storage.from("drawing-packages").upload(pdfPath, file, { upsert: true });
       if (pdfUploadError) throw pdfUploadError;
 
@@ -399,11 +343,19 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
           .single();
         if (pageError) throw pageError;
 
-        const shouldCreateWall = pageInfo.parsed.isPanelPage || !hasPanelPages;
-        if (!shouldCreateWall) continue;
+        if (!pageInfo.parsed.isPanelPage) continue;
 
         const wallType = panelHasSheathing(parsedPages, pageNumber) ? "Sheathed" : pageInfo.parsed.wallType;
         const productionLine = lineForWallType(lines, wallType);
+        const wallPayload = {
+          wall_type: wallType,
+          level: "L1",
+          area_sqft: 0,
+          lineal_feet: pageInfo.parsed.linealFeet,
+          pdf_page_id: savedPage?.id ?? null,
+          production_line_id: productionLine.id,
+          sort_order: pageNumber * 10
+        };
 
         setBusy(`Creating wall card ${pageNumber} of ${pdf.numPages}...`);
         const { data: existingWall, error: existingError } = await supabase
@@ -414,17 +366,14 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
           .maybeSingle();
         if (existingError) throw existingError;
 
-        if (!existingWall) {
+        if (existingWall) {
+          const { error: wallUpdateError } = await supabase.from("wall_panels").update(wallPayload).eq("id", existingWall.id);
+          if (wallUpdateError) throw wallUpdateError;
+        } else {
           const { error: wallError } = await supabase.from("wall_panels").insert({
             project_id: projectId,
             wall_id: pageInfo.parsed.wallId,
-            wall_type: wallType,
-            level: "L1",
-            area_sqft: 0,
-            lineal_feet: pageInfo.parsed.linealFeet,
-            pdf_page_id: savedPage?.id ?? null,
-            production_line_id: productionLine.id,
-            sort_order: pageNumber * 10
+            ...wallPayload
           });
           if (wallError) throw wallError;
         }

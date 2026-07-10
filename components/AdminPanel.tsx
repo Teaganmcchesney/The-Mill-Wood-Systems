@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import type { PdfPage, ProductionLine, Project, WallPanel } from "@/lib/types";
 
+type WallType = "Sheathed" | "Interior" | "Blocked Sheathed" | "Blocked Interior";
+
 type WallForm = {
   id?: string;
   project_id: string;
@@ -21,10 +23,11 @@ type WallForm = {
 
 type ParsedWall = {
   wallId: string;
-  wallType: "Sheathed" | "Interior";
+  wallType: WallType;
   linealFeet: number;
   isPanelPage: boolean;
   hasSheathing: boolean;
+  hasBlocking: boolean;
 };
 
 type ParsedPdfPage = {
@@ -285,7 +288,7 @@ function emptyForm(projectId: string, lineId: string): WallForm {
   return {
     project_id: projectId,
     wall_id: "",
-    wall_type: "Sheathed",
+    wall_type: "Interior",
     level: "L1",
     area_sqft: "",
     lineal_feet: "",
@@ -337,7 +340,7 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
       const pdfPath = `${projectId}/package-${timestamp}.pdf`;
       const parsedPages: ParsedPdfPage[] = [];
 
-      setBusy("Reading panel names and lengths...");
+      setBusy("Reading panel names, lengths, sheathing, and blocking...");
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
         parsedPages.push({ pageNumber, parsed: await parsePdfPage(page, pageNumber) });
@@ -399,7 +402,7 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
 
         if (!pageInfo.parsed.isPanelPage) continue;
 
-        const wallType = panelHasSheathing(parsedPages, pageNumber) ? "Sheathed" : "Interior";
+        const wallType = wallTypeForPanel(panelHasSheathing(parsedPages, pageNumber), panelHasBlocking(parsedPages, pageNumber));
         const productionLine = lineForWallType(lines, wallType);
         const wallPayload = {
           wall_type: wallType,
@@ -491,9 +494,10 @@ function parseWallText(text: string, pageNumber: number): ParsedWall {
   const wallId = panelMatch?.[1]?.toUpperCase() ?? findWallId(text) ?? fallback.wallId;
   const linealFeet = panelMatch?.[2] ? parseImperialLength(panelMatch[2]) ?? fallback.linealFeet : findLengthFeet(text) ?? fallback.linealFeet;
   const hasSheathing = hasExteriorSheathing(text);
-  const wallType = hasSheathing ? "Sheathed" : "Interior";
+  const hasBlocking = hasHorizontalBlocking(text);
+  const wallType = wallTypeForPanel(hasSheathing, hasBlocking);
 
-  return { wallId, linealFeet, wallType, hasSheathing, isPanelPage: Boolean(panelMatch) };
+  return { wallId, linealFeet, wallType, hasSheathing, hasBlocking, isPanelPage: Boolean(panelMatch) };
 }
 
 function fallbackWall(pageNumber: number): ParsedWall {
@@ -502,15 +506,30 @@ function fallbackWall(pageNumber: number): ParsedWall {
     wallType: "Interior",
     linealFeet: 0,
     isPanelPage: false,
-    hasSheathing: false
+    hasSheathing: false,
+    hasBlocking: false
   };
 }
 
 function panelHasSheathing(pages: ParsedPdfPage[], pageNumber: number) {
+  return pageGroup(pages, pageNumber).some((page) => page.parsed.hasSheathing);
+}
+
+function panelHasBlocking(pages: ParsedPdfPage[], pageNumber: number) {
+  return pageGroup(pages, pageNumber).some((page) => page.parsed.hasBlocking);
+}
+
+function pageGroup(pages: ParsedPdfPage[], pageNumber: number) {
   const startIndex = pageNumber - 1;
   const nextPanelIndex = pages.findIndex((page, index) => index > startIndex && page.parsed.isPanelPage);
-  const group = pages.slice(startIndex, nextPanelIndex === -1 ? pages.length : nextPanelIndex);
-  return group.some((page) => page.parsed.hasSheathing);
+  return pages.slice(startIndex, nextPanelIndex === -1 ? pages.length : nextPanelIndex);
+}
+
+function wallTypeForPanel(hasSheathing: boolean, hasBlocking: boolean): WallType {
+  if (hasSheathing && hasBlocking) return "Blocked Sheathed";
+  if (hasSheathing) return "Sheathed";
+  if (hasBlocking) return "Blocked Interior";
+  return "Interior";
 }
 
 function findWallId(text: string) {
@@ -574,8 +593,18 @@ function hasExteriorSheathing(text: string) {
   return /material\s+list.*(?:exterior|ext\.?)\s+(?:sheath(?:ing)?|osb|plywood)/i.test(lower);
 }
 
-function lineForWallType(lines: ProductionLine[], wallType: ParsedWall["wallType"]) {
-  const wanted = wallType === "Sheathed" ? "sheathed" : "interior";
+function hasHorizontalBlocking(text: string) {
+  const lower = text.toLowerCase();
+  if (/(?:no|without)\s+(?:horizontal\s+)?block(?:ing)?/i.test(lower)) return false;
+  if (/horizontal\s+(?:row\s+of\s+)?block(?:ing)?/i.test(lower)) return true;
+  if (/(?:row|course|line)\s+of\s+block(?:ing)?/i.test(lower)) return true;
+  if (/\b(?:blocking|block)\b.*\b(?:horizontal|horiz\.?|row|course)\b/i.test(lower)) return true;
+  if (/\b(?:horizontal|horiz\.?)\b.*\b(?:blocking|block)\b/i.test(lower)) return true;
+  return /material\s+list.*\b(?:blocking|block)\b/i.test(lower);
+}
+
+function lineForWallType(lines: ProductionLine[], wallType: WallType) {
+  const wanted = wallType.includes("Sheathed") ? "sheathed" : "interior";
   const exact = lines.find((line) => normalizeLineName(line.name) === wanted);
   return exact ?? lines.find((line) => normalizeLineName(line.name).includes(wanted)) ?? lines[0];
 }

@@ -5,7 +5,7 @@ import { CheckCircle2, MoveRight } from "lucide-react";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
-import type { ProductionLine, Profile } from "@/lib/types";
+import type { ProductionLine, Profile, Project } from "@/lib/types";
 
 type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
@@ -25,37 +25,75 @@ type QueueWall = {
 export function ShopQueue({
   profile,
   lines,
+  projects,
   activeLineId,
+  activeProjectId,
   walls
 }: {
   profile: Profile;
   lines: ProductionLine[];
+  projects: Project[];
   activeLineId: string;
+  activeProjectId: string;
   walls: QueueWall[];
 }) {
   const activeWall = walls[0] ?? null;
   const nextWalls = walls.slice(1, 6);
+  const activeProject = projects.find((project) => project.id === activeProjectId);
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-lg font-bold text-steel">Production queue</p>
-          <h1 className="text-4xl font-black text-ink">Current wall drawing</h1>
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-lg font-bold text-steel">Production queue</p>
+            <h1 className="text-4xl font-black text-ink">Current wall drawing</h1>
+          </div>
+          <div className="flex gap-2 overflow-x-auto rounded-md bg-white p-2 shadow-touch">
+            {lines.map((line) => (
+              <Link
+                key={line.id}
+                href={shopHref(line.id, activeProjectId)}
+                className={`touch-target rounded-md px-5 py-3 text-lg font-black ${
+                  line.id === activeLineId ? "bg-ink text-white" : "bg-slate-100 text-ink"
+                }`}
+              >
+                {line.name}
+              </Link>
+            ))}
+          </div>
         </div>
-        <div className="flex gap-2 overflow-x-auto rounded-md bg-white p-2 shadow-touch">
-          {lines.map((line) => (
+
+        <section className="grid gap-3 rounded-md bg-white p-4 shadow-touch">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold uppercase text-steel">Project</p>
+              <h2 className="text-2xl font-black text-ink">{activeProject ? `${activeProject.code} - ${activeProject.name}` : "All projects"}</h2>
+            </div>
+            <span className="rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink">{walls.length} waiting</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
             <Link
-              key={line.id}
-              href={`/shop?line=${line.id}`}
-              className={`touch-target rounded-md px-5 py-3 text-lg font-black ${
-                line.id === activeLineId ? "bg-ink text-white" : "bg-slate-100 text-ink"
+              href={shopHref(activeLineId, "all")}
+              className={`touch-target whitespace-nowrap rounded-md px-5 py-3 text-lg font-black ${
+                activeProjectId === "all" ? "bg-ink text-white" : "bg-slate-100 text-ink"
               }`}
             >
-              {line.name}
+              All projects
             </Link>
-          ))}
-        </div>
+            {projects.map((project) => (
+              <Link
+                key={project.id}
+                href={shopHref(activeLineId, project.id)}
+                className={`touch-target whitespace-nowrap rounded-md px-5 py-3 text-lg font-black ${
+                  project.id === activeProjectId ? "bg-ink text-white" : "bg-slate-100 text-ink"
+                }`}
+              >
+                {project.code}
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
 
       {activeWall ? (
@@ -65,20 +103,24 @@ export function ShopQueue({
             <section className="rounded-md bg-white p-5 shadow-touch">
               <h2 className="text-2xl font-black text-ink">Coming up next</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                {nextWalls.map((wall) => (
-                  <div key={wall.id} className="rounded-md bg-slate-100 p-4">
-                    <p className="text-2xl font-black text-ink">{wall.wall_id}</p>
-                    <p className="text-lg font-bold text-steel">{wall.wall_type} / {wall.lineal_feet.toFixed(1)} LF</p>
-                  </div>
-                ))}
+                {nextWalls.map((wall) => {
+                  const project = firstJoined(wall.projects);
+                  return (
+                    <div key={wall.id} className="rounded-md bg-slate-100 p-4">
+                      <p className="text-2xl font-black text-ink">{wall.wall_id}</p>
+                      <p className="text-lg font-bold text-steel">{project?.code} / {wall.level}</p>
+                      <p className="text-lg font-bold text-steel">{wall.wall_type} / {wall.lineal_feet.toFixed(1)} LF</p>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           ) : null}
         </>
       ) : (
         <section className="rounded-md bg-white p-10 text-center shadow-touch">
-          <h2 className="text-3xl font-black text-ink">No walls waiting on this line</h2>
-          <p className="mt-2 text-xl text-steel">Switch lines or check back after admin assigns more work.</p>
+          <h2 className="text-3xl font-black text-ink">No walls waiting here</h2>
+          <p className="mt-2 text-xl text-steel">Switch project or line to find the next wall drawing.</p>
         </section>
       )}
     </div>
@@ -154,6 +196,12 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-3xl font-black text-ink">{value}</p>
     </div>
   );
+}
+
+function shopHref(lineId: string, projectId: string) {
+  const params = new URLSearchParams({ line: lineId });
+  if (projectId !== "all") params.set("project", projectId);
+  return `/shop?${params.toString()}`;
 }
 
 function firstJoined<T>(value: T | T[] | null) {

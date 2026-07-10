@@ -12,6 +12,7 @@ export type ProductionLine = {
   id: string;
   name: string;
   sort_order: number;
+  crew_count?: number | null;
 };
 
 export type Project = {

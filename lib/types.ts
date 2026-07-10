@@ -15,6 +15,15 @@ export type ProductionLine = {
   crew_count?: number | null;
 };
 
+export type ShiftManpower = {
+  id: string;
+  production_line_id: string;
+  shift_date: string;
+  shift_name: string;
+  crew_count: number;
+  shift_hours: number;
+};
+
 export type Project = {
   id: string;
   name: string;

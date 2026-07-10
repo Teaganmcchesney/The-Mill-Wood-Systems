@@ -18,13 +18,29 @@ export function LoginForm() {
         event.preventDefault();
         setBusy(true);
         setError("");
-        const { error: signInError } = await createClient().auth.signInWithPassword({ email, password });
-        setBusy(false);
+        const supabase = createClient();
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+
         if (signInError) {
+          setBusy(false);
           setError(signInError.message);
           return;
         }
-        router.push("/shop");
+
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .single();
+
+        setBusy(false);
+
+        if (profileError || !profile) {
+          setError("Signed in, but no app profile was found for this user.");
+          return;
+        }
+
+        router.push(profile.role === "shop_user" ? "/shop" : "/admin");
         router.refresh();
       }}
     >

@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Arvo:wght@400;700&family=Staatliches&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -15,6 +17,17 @@ body {
   margin: 0;
   background: #050505;
   color: #f7efe5;
+  font-family: "Arvo", Georgia, serif;
+}
+
+h1,
+h2,
+h3,
+.font-black,
+.font-bold,
+.brand-type {
+  font-family: "Staatliches", "Arial Black", Impact, sans-serif;
+  letter-spacing: 0.04em;
 }
 
 a {
@@ -28,11 +41,19 @@ textarea {
   font: inherit;
 }
 
+button,
+.touch-target,
+nav a {
+  font-family: "Staatliches", "Arial Black", Impact, sans-serif;
+  letter-spacing: 0.04em;
+}
+
 input,
 select,
 textarea {
   background: #15130f;
   color: #f7efe5;
+  font-family: "Arvo", Georgia, serif;
 }
 
 option {
@@ -105,12 +126,14 @@ option {
 }
 
 .brand-wordmark {
-  height: 56px;
+  height: 96px;
   width: auto;
-  max-width: 220px;
+  max-width: 320px;
+  object-fit: contain;
 }
 
 .brand-mark {
   height: 56px;
   width: 56px;
+  object-fit: contain;
 }

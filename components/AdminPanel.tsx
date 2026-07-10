@@ -54,6 +54,7 @@ export function AdminPanel({
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const projectDrawingPages = useMemo(() => pages.filter((page) => page.project_id === selectedProjectId), [pages, selectedProjectId]);
   const projectPages = useMemo(() => pages.filter((page) => page.project_id === form.project_id), [pages, form.project_id]);
+  const selectedProjectWalls = useMemo(() => walls.filter((wall) => wall.project_id === selectedProjectId), [walls, selectedProjectId]);
 
   async function createProject() {
     if (!newProject.code.trim() || !newProject.name.trim()) {
@@ -255,7 +256,7 @@ export function AdminPanel({
       <section className="grid gap-3">
         <h2 className="text-2xl font-black text-ink">Wall records</h2>
         <div className="grid gap-3">
-          {walls.map((wall) => (
+          {selectedProjectWalls.map((wall) => (
             <button key={wall.id} className="grid rounded-md bg-white p-4 text-left shadow-touch md:grid-cols-6 md:items-center" onClick={() => setForm(toForm(wall))}>
               <strong className="text-2xl text-ink">{wall.wall_id}</strong>
               <span className="font-bold text-steel">{wall.wall_type}</span>
@@ -398,7 +399,7 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
 
         if (!pageInfo.parsed.isPanelPage) continue;
 
-        const wallType = panelHasSheathing(parsedPages, pageNumber) ? "Sheathed" : pageInfo.parsed.wallType;
+        const wallType = panelHasSheathing(parsedPages, pageNumber) ? "Sheathed" : "Interior";
         const productionLine = lineForWallType(lines, wallType);
         const wallPayload = {
           wall_type: wallType,
@@ -558,14 +559,29 @@ function parseImperialLength(value: string) {
 
 function hasExteriorSheathing(text: string) {
   const lower = text.toLowerCase();
-  const sheathingWords = /(exterior\s+sheath|ext\.?\s+sheath|sheathing|\bosb\b|plywood|structural\s+panel)/i.test(lower);
-  const interiorOnly = /(no\s+sheath|without\s+sheath|interior\s+only)/i.test(lower);
-  return sheathingWords && !interiorOnly;
+  if (/(no\s+exterior\s+sheath|without\s+exterior\s+sheath|exterior\s+sheath(?:ing)?\s*:\s*(?:none|no|n\/?a|not\s+required))/i.test(lower)) {
+    return false;
+  }
+
+  if (/exterior\s+sheath(?:ing)?\s*:\s*(?:start|flush|fly|left|right|full|yes|\d)/i.test(lower)) {
+    return true;
+  }
+
+  if (/(?:ext\.?|exterior)\s+(?:wall\s+)?(?:sheath(?:ing)?|osb|plywood|structural\s+panel)/i.test(lower)) {
+    return true;
+  }
+
+  return /material\s+list.*(?:exterior|ext\.?)\s+(?:sheath(?:ing)?|osb|plywood)/i.test(lower);
 }
 
 function lineForWallType(lines: ProductionLine[], wallType: ParsedWall["wallType"]) {
   const wanted = wallType === "Sheathed" ? "sheathed" : "interior";
-  return lines.find((line) => line.name.toLowerCase().includes(wanted)) ?? lines[0];
+  const exact = lines.find((line) => normalizeLineName(line.name) === wanted);
+  return exact ?? lines.find((line) => normalizeLineName(line.name).includes(wanted)) ?? lines[0];
+}
+
+function normalizeLineName(value: string) {
+  return value.toLowerCase().replace(/[^a-z]/g, "");
 }
 
 function getErrorMessage(error: unknown) {

@@ -23,6 +23,13 @@ type ParsedWall = {
   wallId: string;
   wallType: "Sheathed" | "Interior";
   linealFeet: number;
+  isPanelPage: boolean;
+  hasSheathing: boolean;
+};
+
+type ParsedPdfPage = {
+  pageNumber: number;
+  parsed: ParsedWall;
 };
 
 export function AdminPanel({
@@ -192,7 +199,7 @@ export function AdminPanel({
         </div>
         <PdfUploader projectId={selectedProjectId} lines={lines} onDone={() => router.refresh()} />
         <p className="text-base font-bold text-steel">
-          New uploads will try to read panel name, length, and sheathing from the PDF text. Scanned image-only PDFs may still need manual edits.
+          New uploads read Panel #, Length, and sheathing notes from the PDF text. Each panel becomes one wall card.
         </p>
         <button
           onClick={createDraftWalls}
@@ -334,6 +341,15 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
       const pdf = await pdfjs.getDocument({ data: bytes }).promise;
       const timestamp = Date.now();
       const pdfPath = `${projectId}/package-${timestamp}.pdf`;
+      const parsedPages: ParsedPdfPage[] = [];
+
+      setBusy("Reading panel names and lengths...");
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        parsedPages.push({ pageNumber, parsed: await parsePdfPage(page, pageNumber) });
+      }
+
+      const hasPanelPages = parsedPages.some((page) => page.parsed.isPanelPage);
       const { error: pdfUploadError } = await supabase.storage.from("drawing-packages").upload(pdfPath, file, { upsert: true });
       if (pdfUploadError) throw pdfUploadError;
 
@@ -342,10 +358,8 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
       if (projectError) throw projectError;
 
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-        setBusy(`Reading page ${pageNumber} of ${pdf.numPages}...`);
+        const pageInfo = parsedPages[pageNumber - 1];
         const page = await pdf.getPage(pageNumber);
-        const parsed = await parsePdfPage(page, pageNumber);
-        const productionLine = lineForWallType(lines, parsed.wallType);
         const baseViewport = page.getViewport({ scale: 1 });
         const scale = Math.min(1.4, 1600 / Math.max(baseViewport.width, baseViewport.height));
         const viewport = page.getViewport({ scale });
@@ -385,23 +399,29 @@ function PdfUploader({ projectId, lines, onDone }: { projectId: string; lines: P
           .single();
         if (pageError) throw pageError;
 
+        const shouldCreateWall = pageInfo.parsed.isPanelPage || !hasPanelPages;
+        if (!shouldCreateWall) continue;
+
+        const wallType = panelHasSheathing(parsedPages, pageNumber) ? "Sheathed" : pageInfo.parsed.wallType;
+        const productionLine = lineForWallType(lines, wallType);
+
         setBusy(`Creating wall card ${pageNumber} of ${pdf.numPages}...`);
         const { data: existingWall, error: existingError } = await supabase
           .from("wall_panels")
           .select("id")
           .eq("project_id", projectId)
-          .eq("wall_id", parsed.wallId)
+          .eq("wall_id", pageInfo.parsed.wallId)
           .maybeSingle();
         if (existingError) throw existingError;
 
         if (!existingWall) {
           const { error: wallError } = await supabase.from("wall_panels").insert({
             project_id: projectId,
-            wall_id: parsed.wallId,
-            wall_type: parsed.wallType,
+            wall_id: pageInfo.parsed.wallId,
+            wall_type: wallType,
             level: "L1",
             area_sqft: 0,
-            lineal_feet: parsed.linealFeet,
+            lineal_feet: pageInfo.parsed.linealFeet,
             pdf_page_id: savedPage?.id ?? null,
             production_line_id: productionLine.id,
             sort_order: pageNumber * 10
@@ -453,19 +473,30 @@ async function parsePdfPage(page: { getTextContent: () => Promise<{ items: Array
 
 function parseWallText(text: string, pageNumber: number): ParsedWall {
   const fallback = fallbackWall(pageNumber);
-  const wallId = findWallId(text) ?? fallback.wallId;
-  const linealFeet = findLengthFeet(text) ?? fallback.linealFeet;
-  const wallType = hasExteriorSheathing(text) ? "Sheathed" : "Interior";
+  const panelMatch = text.match(/Panel\s*#\s*([A-Z0-9_.-]+)\s+Length:\s*(.*?)\s+Height:/i);
+  const wallId = panelMatch?.[1]?.toUpperCase() ?? findWallId(text) ?? fallback.wallId;
+  const linealFeet = panelMatch?.[2] ? parseImperialLength(panelMatch[2]) ?? fallback.linealFeet : findLengthFeet(text) ?? fallback.linealFeet;
+  const hasSheathing = hasExteriorSheathing(text);
+  const wallType = hasSheathing ? "Sheathed" : "Interior";
 
-  return { wallId, linealFeet, wallType };
+  return { wallId, linealFeet, wallType, hasSheathing, isPanelPage: Boolean(panelMatch) };
 }
 
 function fallbackWall(pageNumber: number): ParsedWall {
   return {
     wallId: `PAGE-${String(pageNumber).padStart(3, "0")}`,
     wallType: "Interior",
-    linealFeet: 0
+    linealFeet: 0,
+    isPanelPage: false,
+    hasSheathing: false
   };
+}
+
+function panelHasSheathing(pages: ParsedPdfPage[], pageNumber: number) {
+  const startIndex = pageNumber - 1;
+  const nextPanelIndex = pages.findIndex((page, index) => index > startIndex && page.parsed.isPanelPage);
+  const group = pages.slice(startIndex, nextPanelIndex === -1 ? pages.length : nextPanelIndex);
+  return group.some((page) => page.parsed.hasSheathing);
 }
 
 function findWallId(text: string) {
@@ -485,18 +516,36 @@ function findWallId(text: string) {
 }
 
 function findLengthFeet(text: string) {
-  const match = text.match(/(?:length|len\.?|wall\s*length)\s*[:=#-]?\s*(\d+(?:\.\d+)?)\s*(?:'|ft|feet)?\s*(?:[- ]\s*(\d+(?:\.\d+)?)\s*(?:\"|in|inch|inches)?)?/i);
-  if (!match) return null;
+  const match = text.match(/(?:length|len\.?|wall\s*length)\s*[:=#-]?\s*([^\s]+(?:\s+[^\s]+)?)(?:\s+height|\s|$)/i);
+  return match?.[1] ? parseImperialLength(match[1]) : null;
+}
 
-  const feet = Number(match[1]);
-  const inches = match[2] ? Number(match[2]) : 0;
+function parseImperialLength(value: string) {
+  const normalized = value.replace(/[”“]/g, '"').replace(/[‘’]/g, "'").trim();
+  let feet = 0;
+  let inchText = normalized;
+  const feetMatch = normalized.match(/(\d+(?:\.\d+)?)\s*'/);
+
+  if (feetMatch) {
+    feet = Number(feetMatch[1]);
+    inchText = normalized.slice(feetMatch.index! + feetMatch[0].length).trim();
+  }
+
+  const inchMatch = inchText.match(/(\d+(?:\.\d+)?)(?:\s*-\s*(\d+)\/(\d+))?/);
+  let inches = 0;
+  if (inchMatch) {
+    inches = Number(inchMatch[1]);
+    if (inchMatch[2] && inchMatch[3]) inches += Number(inchMatch[2]) / Number(inchMatch[3]);
+  }
+
+  if (!feetMatch && !inchMatch) return null;
   if (!Number.isFinite(feet) || !Number.isFinite(inches)) return null;
   return Math.round((feet + inches / 12) * 100) / 100;
 }
 
 function hasExteriorSheathing(text: string) {
   const lower = text.toLowerCase();
-  const sheathingWords = /(exterior\s+sheath|ext\.?\s+sheath|sheathing|osb|plywood|structural\s+panel)/i.test(lower);
+  const sheathingWords = /(exterior\s+sheath|ext\.?\s+sheath|sheathing|\bosb\b|plywood|structural\s+panel)/i.test(lower);
   const interiorOnly = /(no\s+sheath|without\s+sheath|interior\s+only)/i.test(lower);
   return sheathingWords && !interiorOnly;
 }

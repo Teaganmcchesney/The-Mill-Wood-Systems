@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Save, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { createClient } from "@/lib/supabase-browser";
-import type { ProductionLine } from "@/lib/types";
+import type { ProductionLine, ShiftManpower } from "@/lib/types";
 
 type JoinedLine = { name: string } | { name: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
@@ -28,11 +28,13 @@ type WallSummary = {
 export function DashboardCharts({
   completions,
   walls,
-  lines
+  lines,
+  shiftManpower
 }: {
   completions: Completion[];
   walls: WallSummary[];
   lines: ProductionLine[];
+  shiftManpower: ShiftManpower[];
 }) {
   const today = new Date().toDateString();
   const todayFeet = completions
@@ -47,6 +49,7 @@ export function DashboardCharts({
     (item) => lineName(item.production_lines)
   );
   const projectSummaries = summarizeProjects(walls);
+  const laborRates = laborRateByWallType(completions, shiftManpower, lines);
 
   return (
     <div className="grid gap-6">
@@ -68,10 +71,11 @@ export function DashboardCharts({
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <ChartPanel title="Completed by wall type" data={byType} />
-        <ChartPanel title="Completed by production line" data={byLine} />
-        <ChartPanel title="Remaining by production line" data={remainingByLine} />
-        <LineStaffing lines={lines} completions={completions} />
+        <ShiftManpowerPanel lines={lines} shiftManpower={shiftManpower} />
+        <ChartPanel title="LF per man-hour by wall type" data={laborRates} dataKey="rate" label="LF/man-hour" fill="#0f172a" />
+        <ChartPanel title="Completed by wall type" data={byType} dataKey="linealFeet" label="Lineal feet" fill="#2f855a" />
+        <ChartPanel title="Completed by production line" data={byLine} dataKey="linealFeet" label="Lineal feet" fill="#2f855a" />
+        <ChartPanel title="Remaining by production line" data={remainingByLine} dataKey="linealFeet" label="Lineal feet" fill="#f2c94c" />
       </section>
     </div>
   );
@@ -105,41 +109,61 @@ function ProjectBox({ project }: { project: ProjectSummary }) {
   );
 }
 
-function LineStaffing({ lines, completions }: { lines: ProductionLine[]; completions: Completion[] }) {
+function ShiftManpowerPanel({ lines, shiftManpower }: { lines: ProductionLine[]; shiftManpower: ShiftManpower[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [shiftName, setShiftName] = useState("Day");
   const [crewCounts, setCrewCounts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(lines.map((line) => [line.id, String(line.crew_count ?? 0)]))
+    Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, "Day")?.crew_count ?? line.crew_count ?? 0)]))
+  );
+  const [shiftHours, setShiftHours] = useState<Record<string, string>>(() =>
+    Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, "Day")?.shift_hours ?? 8)]))
   );
   const [savingLineId, setSavingLineId] = useState("");
   const [message, setMessage] = useState("");
 
-  async function saveCrewCount(lineId: string) {
+  useMemo(() => {
+    setCrewCounts(Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, shiftName)?.crew_count ?? line.crew_count ?? 0)])));
+    setShiftHours(Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, shiftName)?.shift_hours ?? 8)])));
+  }, [lines, shiftManpower, shiftName, today]);
+
+  async function saveShift(lineId: string) {
     setSavingLineId(lineId);
     setMessage("");
     const supabase = createClient();
-    const count = Math.max(0, Number.parseInt(crewCounts[lineId] || "0", 10) || 0);
-    const { error } = await supabase.from("production_lines").update({ crew_count: count }).eq("id", lineId);
+    const crewCount = Math.max(0, Number.parseInt(crewCounts[lineId] || "0", 10) || 0);
+    const hours = Math.max(0, Number.parseFloat(shiftHours[lineId] || "0") || 0);
+    const { error } = await supabase.from("shift_manpower").upsert(
+      {
+        production_line_id: lineId,
+        shift_date: today,
+        shift_name: shiftName,
+        crew_count: crewCount,
+        shift_hours: hours
+      },
+      { onConflict: "production_line_id,shift_date,shift_name" }
+    );
     setSavingLineId("");
-    setMessage(error ? error.message : "Employee count saved.");
+    setMessage(error ? error.message : "Shift manpower saved.");
   }
 
   return (
     <section className="rounded-md bg-white p-5 shadow-touch">
-      <div className="flex items-center gap-3">
-        <Users size={28} className="text-ink" />
-        <h2 className="text-2xl font-black text-ink">Line staffing</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Users size={28} className="text-ink" />
+          <h2 className="text-2xl font-black text-ink">Start-of-shift manpower</h2>
+        </div>
+        <select className="touch-target rounded-md border border-slate-300 px-4 text-lg font-black text-ink" value={shiftName} onChange={(event) => setShiftName(event.target.value)}>
+          <option value="Day">Day shift</option>
+          <option value="Night">Night shift</option>
+        </select>
       </div>
       <div className="mt-4 grid gap-3">
-        {lines.map((line) => {
-          const lineDone = completions.filter((item) => item.production_line_id === line.id).reduce((sum, item) => sum + Number(item.lineal_feet), 0);
-          const count = Math.max(0, Number.parseInt(crewCounts[line.id] || "0", 10) || 0);
-          const feetPerEmployee = count > 0 ? lineDone / count : 0;
-
-          return (
-            <div key={line.id} className="grid gap-3 rounded-md bg-slate-100 p-4 md:grid-cols-[1fr_9rem_auto] md:items-center">
-              <div>
-                <p className="text-xl font-black text-ink">{line.name}</p>
-                <p className="text-base font-bold text-steel">{lineDone.toFixed(1)} LF this week / {feetPerEmployee.toFixed(1)} LF per employee</p>
-              </div>
+        {lines.map((line) => (
+          <div key={line.id} className="grid gap-3 rounded-md bg-slate-100 p-4 md:grid-cols-[1fr_8rem_8rem_auto] md:items-center">
+            <p className="text-xl font-black text-ink">{line.name}</p>
+            <label className="grid gap-1 text-sm font-bold uppercase text-steel">
+              People
               <input
                 className="touch-target w-full rounded-md border border-slate-300 px-4 text-2xl font-black text-ink"
                 type="number"
@@ -147,17 +171,28 @@ function LineStaffing({ lines, completions }: { lines: ProductionLine[]; complet
                 inputMode="numeric"
                 value={crewCounts[line.id] ?? "0"}
                 onChange={(event) => setCrewCounts({ ...crewCounts, [line.id]: event.target.value })}
-                aria-label={`${line.name} employee count`}
               />
-              <button
-                onClick={() => saveCrewCount(line.id)}
-                className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white"
-              >
-                <Save size={22} /> {savingLineId === line.id ? "Saving" : "Save"}
-              </button>
-            </div>
-          );
-        })}
+            </label>
+            <label className="grid gap-1 text-sm font-bold uppercase text-steel">
+              Hours
+              <input
+                className="touch-target w-full rounded-md border border-slate-300 px-4 text-2xl font-black text-ink"
+                type="number"
+                min="0"
+                step="0.5"
+                inputMode="decimal"
+                value={shiftHours[line.id] ?? "8"}
+                onChange={(event) => setShiftHours({ ...shiftHours, [line.id]: event.target.value })}
+              />
+            </label>
+            <button
+              onClick={() => saveShift(line.id)}
+              className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white"
+            >
+              <Save size={22} /> {savingLineId === line.id ? "Saving" : "Save"}
+            </button>
+          </div>
+        ))}
       </div>
       {message ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-lg font-bold text-steel">{message}</p> : null}
     </section>
@@ -173,7 +208,19 @@ function SmallMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ChartPanel({ title, data }: { title: string; data: { name: string; linealFeet: number }[] }) {
+function ChartPanel({
+  title,
+  data,
+  dataKey,
+  label,
+  fill
+}: {
+  title: string;
+  data: { name: string; [key: string]: string | number }[];
+  dataKey: string;
+  label: string;
+  fill: string;
+}) {
   return (
     <section className="rounded-md bg-white p-5 shadow-touch">
       <h2 className="text-2xl font-black text-ink">{title}</h2>
@@ -185,7 +232,7 @@ function ChartPanel({ title, data }: { title: string; data: { name: string; line
             <YAxis tick={{ fontSize: 14, fontWeight: 700 }} />
             <Tooltip />
             <Legend />
-            <Bar dataKey="linealFeet" name="Lineal feet" fill="#2f855a" radius={[4, 4, 0, 0]} />
+            <Bar dataKey={dataKey} name={label} fill={fill} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -235,6 +282,31 @@ function summarizeProjects(walls: WallSummary[]) {
   return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
 
+function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManpower[], lines: ProductionLine[]) {
+  const map = new Map<string, { feet: number; keys: Set<string> }>();
+  completions.forEach((completion) => {
+    const current = map.get(completion.wall_type) ?? { feet: 0, keys: new Set<string>() };
+    current.feet += Number(completion.lineal_feet);
+    current.keys.add(`${completion.production_line_id}|${completionDate(completion.completed_at)}`);
+    map.set(completion.wall_type, current);
+  });
+
+  return Array.from(map, ([name, item]) => {
+    let manHours = 0;
+    item.keys.forEach((key) => {
+      const [lineId, date] = key.split("|");
+      const shifts = shiftManpower.filter((shift) => shift.production_line_id === lineId && shift.shift_date === date);
+      if (shifts.length) {
+        manHours += shifts.reduce((sum, shift) => sum + Number(shift.crew_count) * Number(shift.shift_hours), 0);
+      } else {
+        const line = lines.find((value) => value.id === lineId);
+        manHours += Number(line?.crew_count ?? 0) * 8;
+      }
+    });
+    return { name, rate: manHours > 0 ? Math.round((item.feet / manHours) * 100) / 100 : 0 };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function groupBy<T>(items: T[], getName: (item: T) => string) {
   const map = new Map<string, number>();
   items.forEach((item) => {
@@ -242,6 +314,14 @@ function groupBy<T>(items: T[], getName: (item: T) => string) {
     map.set(key, (map.get(key) ?? 0) + Number((item as { lineal_feet: number }).lineal_feet));
   });
   return Array.from(map, ([name, linealFeet]) => ({ name, linealFeet }));
+}
+
+function findShift(shifts: ShiftManpower[], lineId: string, date: string, shiftName: string) {
+  return shifts.find((shift) => shift.production_line_id === lineId && shift.shift_date === date && shift.shift_name === shiftName);
+}
+
+function completionDate(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
 }
 
 function lineName(line: JoinedLine) {

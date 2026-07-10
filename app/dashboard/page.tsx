@@ -9,16 +9,16 @@ export default async function DashboardPage() {
   if (!profile) redirect("/login");
 
   const supabase = createClient();
-  const weekStart = startOfWeekIso();
+  const monthStart = startOfMonthIso();
   const [{ data: completions }, { data: walls }, { data: lines }, { data: shiftManpower }] = await Promise.all([
     supabase
       .from("completion_logs")
       .select("*, production_lines(name)")
-      .gte("completed_at", weekStart)
+      .gte("completed_at", monthStart)
       .order("completed_at", { ascending: false }),
     supabase.from("wall_panels").select("wall_type, lineal_feet, status, production_lines(name), projects(code, name)"),
     supabase.from("production_lines").select("*").order("sort_order"),
-    supabase.from("shift_manpower").select("*").gte("shift_date", weekStart.slice(0, 10)).order("shift_date", { ascending: false })
+    supabase.from("shift_manpower").select("*").gte("shift_date", monthStart.slice(0, 10)).order("shift_date", { ascending: false })
   ]);
 
   return (
@@ -28,10 +28,9 @@ export default async function DashboardPage() {
   );
 }
 
-function startOfWeekIso() {
+function startOfMonthIso() {
   const date = new Date();
-  const day = date.getDay() || 7;
-  date.setDate(date.getDate() - day + 1);
+  date.setDate(1);
   date.setHours(0, 0, 0, 0);
   return date.toISOString();
 }

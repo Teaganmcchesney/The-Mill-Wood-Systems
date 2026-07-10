@@ -1,11 +1,11 @@
 {
-  "name": "PanelTrack Shop",
-  "short_name": "PanelTrack",
-  "description": "Prefab wall panel production tracking",
+  "name": "The Mill Wall Tracker",
+  "short_name": "The Mill",
+  "description": "Prefab wall panel production tracking for The Mill Wood Systems",
   "start_url": "/shop",
   "display": "standalone",
-  "background_color": "#f3f5f7",
-  "theme_color": "#14213d",
+  "background_color": "#050505",
+  "theme_color": "#050505",
   "icons": [
     {
       "src": "/icon.svg",

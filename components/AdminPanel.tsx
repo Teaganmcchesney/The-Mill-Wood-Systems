@@ -33,8 +33,41 @@ export function AdminPanel({
   const router = useRouter();
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState("");
+  const [projectBusy, setProjectBusy] = useState("");
+  const [projectError, setProjectError] = useState("");
+  const [newProject, setNewProject] = useState({ code: "", name: "" });
   const [form, setForm] = useState<WallForm>(() => emptyForm(projects[0]?.id ?? "", lines[0]?.id ?? ""));
+  const selectedProjectId = projectId || projects[0]?.id || "";
   const projectPages = useMemo(() => pages.filter((page) => page.project_id === form.project_id), [pages, form.project_id]);
+
+  async function createProject() {
+    if (!newProject.code.trim() || !newProject.name.trim()) {
+      setProjectError("Enter a project code and project name.");
+      return;
+    }
+
+    setProjectBusy("Creating project...");
+    setProjectError("");
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("projects")
+      .insert({ code: newProject.code.trim(), name: newProject.name.trim() })
+      .select("id")
+      .single();
+
+    setProjectBusy("");
+    if (error) {
+      setProjectError(error.message);
+      return;
+    }
+
+    setNewProject({ code: "", name: "" });
+    if (data?.id) {
+      setProjectId(data.id);
+      setForm((current) => ({ ...current, project_id: data.id, pdf_page_id: "" }));
+    }
+    router.refresh();
+  }
 
   async function saveWall() {
     setBusy("Saving wall...");
@@ -68,16 +101,39 @@ export function AdminPanel({
 
       <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
         <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 className="text-2xl font-black text-ink">Projects</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <Field label="Project code" value={newProject.code} onChange={(value) => setNewProject({ ...newProject, code: value })} />
+          <Field label="Project name" value={newProject.name} onChange={(value) => setNewProject({ ...newProject, name: value })} />
+          <button onClick={createProject} className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white">
+            <Plus size={22} /> {projectBusy || "Create project"}
+          </button>
+        </div>
+        {projectError ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{projectError}</p> : null}
+      </section>
+
+      <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-2xl font-black text-ink">Drawing package</h2>
-          <select className="touch-target rounded-md border border-slate-300 px-4 text-lg font-bold" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+          <select
+            className="touch-target rounded-md border border-slate-300 px-4 text-lg font-bold"
+            value={selectedProjectId}
+            disabled={!projects.length}
+            onChange={(event) => {
+              setProjectId(event.target.value);
+              setForm({ ...form, project_id: event.target.value, pdf_page_id: "" });
+            }}
+          >
+            {projects.length ? null : <option value="">Create a project first</option>}
             {projects.map((project) => (
               <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
             ))}
           </select>
         </div>
-        <PdfUploader projectId={projectId} onDone={() => router.refresh()} />
+        <PdfUploader projectId={selectedProjectId} onDone={() => router.refresh()} />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-          {pages.filter((page) => page.project_id === projectId).map((page) => (
+          {pages.filter((page) => page.project_id === selectedProjectId).map((page) => (
             <div key={page.id} className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={page.image_url} alt={`Page ${page.page_number}`} className="aspect-[8.5/11] w-full object-cover" />
@@ -189,7 +245,7 @@ function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => v
 
   async function handleFile(file: File) {
     if (!projectId) {
-      setError("Choose a project before uploading a PDF.");
+      setError("Choose or create a project before uploading a PDF.");
       return;
     }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileUp, Plus, Save } from "lucide-react";
+import { FileUp, Plus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import type { PdfPage, ProductionLine, Project, WallPanel } from "@/lib/types";
@@ -51,6 +51,7 @@ export function AdminPanel({
   const [newProject, setNewProject] = useState({ code: "", name: "" });
   const [form, setForm] = useState<WallForm>(() => emptyForm(projects[0]?.id ?? "", lines[0]?.id ?? ""));
   const selectedProjectId = projectId || projects[0]?.id || "";
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const projectDrawingPages = useMemo(() => pages.filter((page) => page.project_id === selectedProjectId), [pages, selectedProjectId]);
   const projectPages = useMemo(() => pages.filter((page) => page.project_id === form.project_id), [pages, form.project_id]);
 
@@ -80,6 +81,35 @@ export function AdminPanel({
       setProjectId(data.id);
       setForm((current) => ({ ...current, project_id: data.id, pdf_page_id: "" }));
     }
+    router.refresh();
+  }
+
+  async function deleteProject() {
+    if (!selectedProject) {
+      setProjectError("Choose a project to delete.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${selectedProject.code} - ${selectedProject.name}? This removes its wall cards and drawing pages from the app.`
+    );
+    if (!confirmed) return;
+
+    setProjectBusy("Deleting project...");
+    setProjectError("");
+    const supabase = createClient();
+    const { error } = await supabase.from("projects").delete().eq("id", selectedProject.id);
+    setProjectBusy("");
+
+    if (error) {
+      setProjectError(error.message);
+      return;
+    }
+
+    const nextProject = projects.find((project) => project.id !== selectedProject.id);
+    const nextProjectId = nextProject?.id ?? "";
+    setProjectId(nextProjectId);
+    setForm(emptyForm(nextProjectId, lines[0]?.id ?? ""));
     router.refresh();
   }
 
@@ -122,6 +152,29 @@ export function AdminPanel({
           <Field label="Project name" value={newProject.name} onChange={(value) => setNewProject({ ...newProject, name: value })} />
           <button onClick={createProject} className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white">
             <Plus size={22} /> {projectBusy || "Create project"}
+          </button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+          <label className="grid gap-2 text-lg font-bold text-ink">
+            Delete project
+            <select
+              className="touch-target rounded-md border border-slate-300 px-4"
+              value={selectedProjectId}
+              disabled={!projects.length}
+              onChange={(event) => setProjectId(event.target.value)}
+            >
+              {projects.length ? null : <option value="">No projects</option>}
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>{project.code} - {project.name}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={deleteProject}
+            disabled={!selectedProject || Boolean(projectBusy)}
+            className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-red-700 px-5 py-3 text-lg font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 size={22} /> Delete selected project
           </button>
         </div>
         {projectError ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{projectError}</p> : null}

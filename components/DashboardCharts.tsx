@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Save, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { createClient } from "@/lib/supabase-browser";
@@ -121,7 +121,7 @@ function ShiftManpowerPanel({ lines, shiftManpower }: { lines: ProductionLine[];
   const [savingLineId, setSavingLineId] = useState("");
   const [message, setMessage] = useState("");
 
-  useMemo(() => {
+  useEffect(() => {
     setCrewCounts(Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, shiftName)?.crew_count ?? line.crew_count ?? 0)])));
     setShiftHours(Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, shiftName)?.shift_hours ?? 8)])));
   }, [lines, shiftManpower, shiftName, today]);

@@ -27,6 +27,7 @@ const FILTERS = ["Today", "This Week", "This Month"] as const;
 type DateFilter = (typeof FILTERS)[number];
 type JoinedLine = { name: string } | { name: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
+type JoinedWallPanel = { projects: JoinedProject } | { projects: JoinedProject }[] | null;
 
 type Completion = {
   wall_type: string;
@@ -34,6 +35,7 @@ type Completion = {
   production_line_id: string;
   completed_at: string;
   production_lines: JoinedLine;
+  wall_panels: JoinedWallPanel;
 };
 
 type WallSummary = {
@@ -59,8 +61,12 @@ export function DashboardCharts({
   const [projectFilter, setProjectFilter] = useState("all");
   const dateRange = useMemo(() => getDateRange(dateFilter), [dateFilter]);
   const filteredCompletions = useMemo(
-    () => completions.filter((item) => withinRange(new Date(item.completed_at), dateRange.start, dateRange.end)),
-    [completions, dateRange]
+    () => completions.filter((item) => {
+      const inDateRange = withinRange(new Date(item.completed_at), dateRange.start, dateRange.end);
+      const inProject = projectFilter === "all" || projectName(completionProject(item.wall_panels)).key === projectFilter;
+      return inDateRange && inProject;
+    }),
+    [completions, dateRange, projectFilter]
   );
   const projectOptions = useMemo(() => summarizeProjects(walls), [walls]);
   const filteredWalls = useMemo(
@@ -70,7 +76,11 @@ export function DashboardCharts({
 
   const today = new Date().toDateString();
   const todayFeet = completions
-    .filter((item) => new Date(item.completed_at).toDateString() === today)
+    .filter((item) => {
+      const isToday = new Date(item.completed_at).toDateString() === today;
+      const inProject = projectFilter === "all" || projectName(completionProject(item.wall_panels)).key === projectFilter;
+      return isToday && inProject;
+    })
     .reduce((sum, item) => sum + Number(item.lineal_feet), 0);
   const rangeFeet = filteredCompletions.reduce((sum, item) => sum + Number(item.lineal_feet), 0);
   const remainingFeet = filteredWalls.filter((wall) => wall.status !== "complete").reduce((sum, wall) => sum + Number(wall.lineal_feet), 0);
@@ -86,7 +96,7 @@ export function DashboardCharts({
   );
   const wallTypeStatus = allWallTypeStatus(filteredWalls);
   const wallTypeKpis = wallTypeStatus.map((item) => ({ ...item, laborRate: laborRateMap.get(item.name) ?? 0 }));
-  const laborTrend = laborTrendByDate(completions, shiftManpower, lines, dateRange);
+  const laborTrend = laborTrendByDate(filteredCompletions, shiftManpower, lines, dateRange);
 
   return (
     <div className="grid gap-6">
@@ -99,7 +109,7 @@ export function DashboardCharts({
         <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <h2 className="text-2xl font-black text-ink">Dashboard filters</h2>
-            <p className="text-base font-bold text-steel">Date filters change production KPIs and trends. Project filters focus wall totals and remaining work.</p>
+            <p className="text-base font-bold text-steel">Date and project filters change production KPIs, trends, wall totals, and remaining work.</p>
           </div>
           <label className="grid gap-2 text-lg font-bold text-ink">
             Project
@@ -352,14 +362,16 @@ function laborTrendByDate(completions: Completion[], shiftManpower: ShiftManpowe
       map.set(date, dayMap);
     });
 
-  return Array.from(map, ([date, dayMap]) => {
-    const point: TrendPoint = { date: shortDate(date) };
-    WALL_TYPES.forEach((wallType) => {
-      const item = dayMap.get(wallType);
-      point[wallType] = item ? laborRateFor(item.feet, item.keys, shiftManpower, lines) : 0;
+  return Array.from(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, dayMap]) => {
+      const point: TrendPoint = { date: shortDate(date) };
+      WALL_TYPES.forEach((wallType) => {
+        const item = dayMap.get(wallType);
+        point[wallType] = item ? laborRateFor(item.feet, item.keys, shiftManpower, lines) : 0;
+      });
+      return point;
     });
-    return point;
-  }).sort((a, b) => String(a.date).localeCompare(String(b.date)));
 }
 
 function laborRateFor(feet: number, keys: Set<string>, shiftManpower: ShiftManpower[], lines: ProductionLine[]) {
@@ -462,6 +474,12 @@ function shortDate(value: string) {
 function lineName(line: JoinedLine) {
   if (!line) return "Unassigned";
   return Array.isArray(line) ? line[0]?.name ?? "Unassigned" : line.name;
+}
+
+function completionProject(wallPanel: JoinedWallPanel) {
+  if (!wallPanel) return null;
+  const value = Array.isArray(wallPanel) ? wallPanel[0] ?? null : wallPanel;
+  return value?.projects ?? null;
 }
 
 function projectName(project: JoinedProject) {

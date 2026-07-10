@@ -1,10 +1,30 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from "recharts";
 import type { ProductionLine, ShiftManpower } from "@/lib/types";
 
 const WALL_TYPES = ["Interior", "Blocked Interior", "Sheathed", "Blocked Sheathed"];
+const WALL_TYPE_COLORS: Record<string, string> = {
+  Interior: "#111827",
+  "Blocked Interior": "#f2c94c",
+  Sheathed: "#2f855a",
+  "Blocked Sheathed": "#c05621"
+};
+const FILTERS = ["Today", "This Week", "This Month"] as const;
 
+type DateFilter = (typeof FILTERS)[number];
 type JoinedLine = { name: string } | { name: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
 
@@ -35,24 +55,38 @@ export function DashboardCharts({
   lines: ProductionLine[];
   shiftManpower: ShiftManpower[];
 }) {
+  const [dateFilter, setDateFilter] = useState<DateFilter>("This Week");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const dateRange = useMemo(() => getDateRange(dateFilter), [dateFilter]);
+  const filteredCompletions = useMemo(
+    () => completions.filter((item) => withinRange(new Date(item.completed_at), dateRange.start, dateRange.end)),
+    [completions, dateRange]
+  );
+  const projectOptions = useMemo(() => summarizeProjects(walls), [walls]);
+  const filteredWalls = useMemo(
+    () => walls.filter((wall) => projectFilter === "all" || projectName(wall.projects).key === projectFilter),
+    [walls, projectFilter]
+  );
+
   const today = new Date().toDateString();
   const todayFeet = completions
     .filter((item) => new Date(item.completed_at).toDateString() === today)
     .reduce((sum, item) => sum + Number(item.lineal_feet), 0);
-  const weekFeet = completions.reduce((sum, item) => sum + Number(item.lineal_feet), 0);
-  const remainingFeet = walls.filter((wall) => wall.status !== "complete").reduce((sum, wall) => sum + Number(wall.lineal_feet), 0);
-  const byType = allWallTypeTotals(completions);
-  const byLine = groupBy(completions, (item) => lineName(item.production_lines));
+  const rangeFeet = filteredCompletions.reduce((sum, item) => sum + Number(item.lineal_feet), 0);
+  const remainingFeet = filteredWalls.filter((wall) => wall.status !== "complete").reduce((sum, wall) => sum + Number(wall.lineal_feet), 0);
+  const byType = allWallTypeTotals(filteredCompletions);
+  const byLine = groupBy(filteredCompletions, (item) => lineName(item.production_lines));
   const remainingByLine = groupBy(
-    walls.filter((wall) => wall.status !== "complete"),
+    filteredWalls.filter((wall) => wall.status !== "complete"),
     (item) => lineName(item.production_lines)
   );
-  const projectSummaries = summarizeProjects(walls);
+  const projectSummaries = summarizeProjects(filteredWalls);
   const laborRateMap = new Map<string, number>(
-    laborRateByWallType(completions, shiftManpower, lines).map((item): [string, number] => [item.name, item.rate])
+    laborRateByWallType(filteredCompletions, shiftManpower, lines).map((item): [string, number] => [item.name, item.rate])
   );
-  const wallTypeStatus = allWallTypeStatus(walls);
+  const wallTypeStatus = allWallTypeStatus(filteredWalls);
   const wallTypeKpis = wallTypeStatus.map((item) => ({ ...item, laborRate: laborRateMap.get(item.name) ?? 0 }));
+  const laborTrend = laborTrendByDate(completions, shiftManpower, lines, dateRange);
 
   return (
     <div className="grid gap-6">
@@ -61,9 +95,42 @@ export function DashboardCharts({
         <h1 className="text-4xl font-black text-ink">Lineal feet completed and remaining</h1>
       </div>
 
+      <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <h2 className="text-2xl font-black text-ink">Dashboard filters</h2>
+            <p className="text-base font-bold text-steel">Date filters change production KPIs and trends. Project filters focus wall totals and remaining work.</p>
+          </div>
+          <label className="grid gap-2 text-lg font-bold text-ink">
+            Project
+            <select
+              className="touch-target rounded-md border border-slate-300 px-4 text-lg font-bold"
+              value={projectFilter}
+              onChange={(event) => setProjectFilter(event.target.value)}
+            >
+              <option value="all">All projects</option>
+              {projectOptions.map((project) => (
+                <option key={project.key} value={project.key}>{project.code} - {project.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {FILTERS.map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setDateFilter(filter)}
+              className={`touch-target rounded-md px-4 py-4 text-lg font-black ${dateFilter === filter ? "bg-ink text-white" : "bg-slate-100 text-ink"}`}
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-3">
         <Kpi label="Completed today" value={`${todayFeet.toFixed(1)} LF`} tone="bg-pass text-white" />
-        <Kpi label="Completed this week" value={`${weekFeet.toFixed(1)} LF`} tone="bg-ink text-white" />
+        <Kpi label={`Completed ${dateFilter.toLowerCase()}`} value={`${rangeFeet.toFixed(1)} LF`} tone="bg-ink text-white" />
         <Kpi label="Remaining" value={`${remainingFeet.toFixed(1)} LF`} tone="bg-shop text-ink" />
       </section>
 
@@ -83,6 +150,8 @@ export function DashboardCharts({
           ))}
         </div>
       </section>
+
+      <TrendPanel data={laborTrend} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {projectSummaries.map((project) => (
@@ -133,6 +202,37 @@ function SmallMetric({ label, value, tone = "bg-white text-ink" }: { label: stri
       <p className="text-xs font-bold uppercase opacity-70">{label}</p>
       <p className="text-xl font-black">{value}</p>
     </div>
+  );
+}
+
+function TrendPanel({ data }: { data: TrendPoint[] }) {
+  return (
+    <section className="rounded-md bg-white p-5 shadow-touch">
+      <h2 className="text-2xl font-black text-ink">LF per man-hour trend</h2>
+      <div className="mt-4 h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" tick={{ fontSize: 14, fontWeight: 700 }} />
+            <YAxis tick={{ fontSize: 14, fontWeight: 700 }} />
+            <Tooltip />
+            <Legend />
+            {WALL_TYPES.map((wallType) => (
+              <Line
+                key={wallType}
+                type="monotone"
+                dataKey={wallType}
+                name={wallType}
+                stroke={WALL_TYPE_COLORS[wallType]}
+                strokeWidth={3}
+                dot={{ r: 4 }}
+                connectNulls
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
   );
 }
 
@@ -187,6 +287,11 @@ type WallTypeStatus = {
   totalWalls: number;
 };
 
+type TrendPoint = {
+  date: string;
+  [key: string]: string | number;
+};
+
 function summarizeProjects(walls: WallSummary[]) {
   const map = new Map<string, ProjectSummary>();
 
@@ -229,20 +334,47 @@ function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManp
     map.set(completion.wall_type, current);
   });
 
-  return Array.from(map, ([name, item]) => {
-    let manHours = 0;
-    item.keys.forEach((key) => {
-      const [lineId, date] = key.split("|");
-      const shifts = shiftManpower.filter((shift) => shift.production_line_id === lineId && shift.shift_date === date);
-      if (shifts.length) {
-        manHours += shifts.reduce((sum, shift) => sum + Number(shift.crew_count) * Number(shift.shift_hours), 0);
-      } else {
-        const line = lines.find((value) => value.id === lineId);
-        manHours += Number(line?.crew_count ?? 0) * 8;
-      }
+  return Array.from(map, ([name, item]) => ({ name, rate: laborRateFor(item.feet, item.keys, shiftManpower, lines) }));
+}
+
+function laborTrendByDate(completions: Completion[], shiftManpower: ShiftManpower[], lines: ProductionLine[], range: DateRange) {
+  const map = new Map<string, Map<string, { feet: number; keys: Set<string> }>>();
+  completions
+    .filter((completion) => withinRange(new Date(completion.completed_at), range.start, range.end))
+    .forEach((completion) => {
+      const date = completionDate(completion.completed_at);
+      const dayMap = map.get(date) ?? new Map<string, { feet: number; keys: Set<string> }>();
+      const wallType = completion.wall_type;
+      const current = dayMap.get(wallType) ?? { feet: 0, keys: new Set<string>() };
+      current.feet += Number(completion.lineal_feet);
+      current.keys.add(`${completion.production_line_id}|${date}`);
+      dayMap.set(wallType, current);
+      map.set(date, dayMap);
     });
-    return { name, rate: manHours > 0 ? Math.round((item.feet / manHours) * 100) / 100 : 0 };
+
+  return Array.from(map, ([date, dayMap]) => {
+    const point: TrendPoint = { date: shortDate(date) };
+    WALL_TYPES.forEach((wallType) => {
+      const item = dayMap.get(wallType);
+      point[wallType] = item ? laborRateFor(item.feet, item.keys, shiftManpower, lines) : 0;
+    });
+    return point;
+  }).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
+function laborRateFor(feet: number, keys: Set<string>, shiftManpower: ShiftManpower[], lines: ProductionLine[]) {
+  let manHours = 0;
+  keys.forEach((key) => {
+    const [lineId, date] = key.split("|");
+    const shifts = shiftManpower.filter((shift) => shift.production_line_id === lineId && shift.shift_date === date);
+    if (shifts.length) {
+      manHours += shifts.reduce((sum, shift) => sum + Number(shift.crew_count) * Number(shift.shift_hours), 0);
+    } else {
+      const line = lines.find((value) => value.id === lineId);
+      manHours += Number(line?.crew_count ?? 0) * 8;
+    }
   });
+  return manHours > 0 ? Math.round((feet / manHours) * 100) / 100 : 0;
 }
 
 function allWallTypeStatus(walls: WallSummary[]) {
@@ -290,8 +422,41 @@ function groupBy<T>(items: T[], getName: (item: T) => string) {
   return Array.from(map, ([name, linealFeet]) => ({ name, linealFeet }));
 }
 
+type DateRange = { start: Date; end: Date };
+
+function getDateRange(filter: DateFilter): DateRange {
+  const start = new Date();
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  if (filter === "Today") {
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  }
+
+  if (filter === "This Week") {
+    const day = start.getDay() || 7;
+    start.setDate(start.getDate() - day + 1);
+    start.setHours(0, 0, 0, 0);
+    return { start, end };
+  }
+
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  return { start, end };
+}
+
+function withinRange(date: Date, start: Date, end: Date) {
+  return date >= start && date <= end;
+}
+
 function completionDate(value: string) {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function shortDate(value: string) {
+  const [, month, day] = value.split("-");
+  return `${month}/${day}`;
 }
 
 function lineName(line: JoinedLine) {

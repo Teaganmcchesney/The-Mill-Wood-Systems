@@ -12,6 +12,13 @@ A tablet-first PWA for tracking prefab wall panel completion by production line.
 - Dashboard with today, week, and remaining lineal feet using Recharts
 - PWA manifest and installable app metadata
 
+## Production lines
+
+The default shop setup has two production lines:
+
+- Sheathed
+- Interior
+
 ## Setup
 
 1. Install dependencies:
@@ -42,7 +49,7 @@ insert into public.profiles (id, full_name, role, production_line_id)
 values
   ('<admin-user-id>', 'Admin User', 'admin', null),
   ('<supervisor-user-id>', 'Shift Supervisor', 'supervisor', null),
-  ('<shop-user-id>', 'Line 1 Operator', 'shop_user', '11111111-1111-1111-1111-111111111111');
+  ('<shop-user-id>', 'Sheathed Line Operator', 'shop_user', '11111111-1111-1111-1111-111111111111');
 ```
 
 For quick local testing, create these emails with the password `password123`:

@@ -48,8 +48,9 @@ export function DashboardCharts({
     (item) => lineName(item.production_lines)
   );
   const projectSummaries = summarizeProjects(walls);
-  const laborRates = laborRateByWallType(completions, shiftManpower, lines);
+  const laborRateMap = new Map(laborRateByWallType(completions, shiftManpower, lines).map((item) => [item.name, item.rate]));
   const wallTypeStatus = allWallTypeStatus(walls);
+  const wallTypeKpis = wallTypeStatus.map((item) => ({ ...item, laborRate: laborRateMap.get(item.name) ?? 0 }));
 
   return (
     <div className="grid gap-6">
@@ -65,14 +66,16 @@ export function DashboardCharts({
       </section>
 
       <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
-        <h2 className="text-2xl font-black text-ink">Wall type categories</h2>
+        <h2 className="text-2xl font-black text-ink">Wall type production KPIs</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {wallTypeStatus.map((item) => (
+          {wallTypeKpis.map((item) => (
             <div key={item.name} className="rounded-md bg-slate-100 p-4">
               <p className="text-2xl font-black text-ink">{item.name}</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
+                <SmallMetric label="LF/man-hour" value={item.laborRate > 0 ? item.laborRate.toFixed(2) : "0.00"} tone="bg-ink text-white" />
                 <SmallMetric label="Done" value={`${item.completedFeet.toFixed(1)} LF`} />
                 <SmallMetric label="Left" value={`${item.remainingFeet.toFixed(1)} LF`} />
+                <SmallMetric label="Walls" value={`${item.completedWalls}/${item.totalWalls}`} />
               </div>
             </div>
           ))}
@@ -86,7 +89,6 @@ export function DashboardCharts({
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <ChartPanel title="LF per man-hour by wall type" data={laborRates} dataKey="rate" label="LF/man-hour" fill="#0f172a" />
         <ChartPanel title="Completed by wall type" data={byType} dataKey="linealFeet" label="Lineal feet" fill="#2f855a" />
         <ChartPanel title="Completed by production line" data={byLine} dataKey="linealFeet" label="Lineal feet" fill="#2f855a" />
         <ChartPanel title="Remaining by production line" data={remainingByLine} dataKey="linealFeet" label="Lineal feet" fill="#f2c94c" />
@@ -123,11 +125,11 @@ function ProjectBox({ project }: { project: ProjectSummary }) {
   );
 }
 
-function SmallMetric({ label, value }: { label: string; value: string }) {
+function SmallMetric({ label, value, tone = "bg-white text-ink" }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-md bg-white p-3">
-      <p className="text-xs font-bold uppercase text-steel">{label}</p>
-      <p className="text-xl font-black text-ink">{value}</p>
+    <div className={`rounded-md p-3 ${tone}`}>
+      <p className="text-xs font-bold uppercase opacity-70">{label}</p>
+      <p className="text-xl font-black">{value}</p>
     </div>
   );
 }
@@ -234,13 +236,31 @@ function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManp
 }
 
 function allWallTypeStatus(walls: WallSummary[]) {
-  const map = new Map(WALL_TYPES.map((wallType) => [wallType, { name: wallType, completedFeet: 0, remainingFeet: 0 }]));
+  const map = new Map(
+    WALL_TYPES.map((wallType) => [
+      wallType,
+      { name: wallType, completedFeet: 0, remainingFeet: 0, completedWalls: 0, totalWalls: 0 }
+    ])
+  );
+
   walls.forEach((wall) => {
-    const current = map.get(wall.wall_type) ?? { name: wall.wall_type, completedFeet: 0, remainingFeet: 0 };
-    if (wall.status === "complete") current.completedFeet += Number(wall.lineal_feet);
-    else current.remainingFeet += Number(wall.lineal_feet);
+    const current = map.get(wall.wall_type) ?? {
+      name: wall.wall_type,
+      completedFeet: 0,
+      remainingFeet: 0,
+      completedWalls: 0,
+      totalWalls: 0
+    };
+    current.totalWalls += 1;
+    if (wall.status === "complete") {
+      current.completedFeet += Number(wall.lineal_feet);
+      current.completedWalls += 1;
+    } else {
+      current.remainingFeet += Number(wall.lineal_feet);
+    }
     map.set(wall.wall_type, current);
   });
+
   return Array.from(map.values());
 }
 

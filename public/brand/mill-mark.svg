@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">The Mill mark</title>
+  <rect width="128" height="128" rx="24" fill="#050505"/>
+  <circle cx="64" cy="64" r="50" fill="none" stroke="#F7EFE5" stroke-width="10"/>
+  <circle cx="64" cy="64" r="27" fill="none" stroke="#F05A24" stroke-width="8"/>
+  <circle cx="64" cy="64" r="7" fill="#F7EFE5"/>
+  <text x="64" y="31" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="18" font-weight="900" fill="#F7EFE5">THE</text>
+  <text x="64" y="104" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="18" font-weight="900" fill="#F7EFE5">MILL</text>
+</svg>

@@ -52,6 +52,7 @@ export function DashboardCharts({
   );
   const projectSummaries = summarizeProjects(walls);
   const laborRates = laborRateByWallType(completions, shiftManpower, lines);
+  const wallTypeStatus = allWallTypeStatus(walls);
 
   return (
     <div className="grid gap-6">
@@ -64,6 +65,21 @@ export function DashboardCharts({
         <Kpi label="Completed today" value={`${todayFeet.toFixed(1)} LF`} tone="bg-pass text-white" />
         <Kpi label="Completed this week" value={`${weekFeet.toFixed(1)} LF`} tone="bg-ink text-white" />
         <Kpi label="Remaining" value={`${remainingFeet.toFixed(1)} LF`} tone="bg-shop text-ink" />
+      </section>
+
+      <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
+        <h2 className="text-2xl font-black text-ink">Wall type categories</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {wallTypeStatus.map((item) => (
+            <div key={item.name} className="rounded-md bg-slate-100 p-4">
+              <p className="text-2xl font-black text-ink">{item.name}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <SmallMetric label="Done" value={`${item.completedFeet.toFixed(1)} LF`} />
+                <SmallMetric label="Left" value={`${item.remainingFeet.toFixed(1)} LF`} />
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -203,7 +219,7 @@ function ShiftManpowerPanel({ lines, shiftManpower }: { lines: ProductionLine[];
 
 function SmallMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-100 p-3">
+    <div className="rounded-md bg-white p-3">
       <p className="text-xs font-bold uppercase text-steel">{label}</p>
       <p className="text-xl font-black text-ink">{value}</p>
     </div>
@@ -309,6 +325,17 @@ function laborRateByWallType(completions: Completion[], shiftManpower: ShiftManp
     });
     return { name, rate: manHours > 0 ? Math.round((item.feet / manHours) * 100) / 100 : 0 };
   });
+}
+
+function allWallTypeStatus(walls: WallSummary[]) {
+  const map = new Map(WALL_TYPES.map((wallType) => [wallType, { name: wallType, completedFeet: 0, remainingFeet: 0 }]));
+  walls.forEach((wall) => {
+    const current = map.get(wall.wall_type) ?? { name: wall.wall_type, completedFeet: 0, remainingFeet: 0 };
+    if (wall.status === "complete") current.completedFeet += Number(wall.lineal_feet);
+    else current.remainingFeet += Number(wall.lineal_feet);
+    map.set(wall.wall_type, current);
+  });
+  return Array.from(map.values());
 }
 
 function allWallTypeTotals(completions: Completion[]) {

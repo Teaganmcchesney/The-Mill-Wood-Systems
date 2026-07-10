@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Save, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { createClient } from "@/lib/supabase-browser";
 import type { ProductionLine, ShiftManpower } from "@/lib/types";
 
 const WALL_TYPES = ["Interior", "Blocked Interior", "Sheathed", "Blocked Sheathed"];
@@ -89,7 +86,6 @@ export function DashboardCharts({
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">
-        <ShiftManpowerPanel lines={lines} shiftManpower={shiftManpower} />
         <ChartPanel title="LF per man-hour by wall type" data={laborRates} dataKey="rate" label="LF/man-hour" fill="#0f172a" />
         <ChartPanel title="Completed by wall type" data={byType} dataKey="linealFeet" label="Lineal feet" fill="#2f855a" />
         <ChartPanel title="Completed by production line" data={byLine} dataKey="linealFeet" label="Lineal feet" fill="#2f855a" />
@@ -123,96 +119,6 @@ function ProjectBox({ project }: { project: ProjectSummary }) {
         <SmallMetric label="Left" value={`${project.remainingFeet.toFixed(1)} LF`} />
         <SmallMetric label="Walls" value={`${project.completedWalls}/${project.totalWalls}`} />
       </div>
-    </section>
-  );
-}
-
-function ShiftManpowerPanel({ lines, shiftManpower }: { lines: ProductionLine[]; shiftManpower: ShiftManpower[] }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [shiftName, setShiftName] = useState("Day");
-  const [crewCounts, setCrewCounts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, "Day")?.crew_count ?? line.crew_count ?? 0)]))
-  );
-  const [shiftHours, setShiftHours] = useState<Record<string, string>>(() =>
-    Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, "Day")?.shift_hours ?? 8)]))
-  );
-  const [savingLineId, setSavingLineId] = useState("");
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    setCrewCounts(Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, shiftName)?.crew_count ?? line.crew_count ?? 0)])));
-    setShiftHours(Object.fromEntries(lines.map((line) => [line.id, String(findShift(shiftManpower, line.id, today, shiftName)?.shift_hours ?? 8)])));
-  }, [lines, shiftManpower, shiftName, today]);
-
-  async function saveShift(lineId: string) {
-    setSavingLineId(lineId);
-    setMessage("");
-    const supabase = createClient();
-    const crewCount = Math.max(0, Number.parseInt(crewCounts[lineId] || "0", 10) || 0);
-    const hours = Math.max(0, Number.parseFloat(shiftHours[lineId] || "0") || 0);
-    const { error } = await supabase.from("shift_manpower").upsert(
-      {
-        production_line_id: lineId,
-        shift_date: today,
-        shift_name: shiftName,
-        crew_count: crewCount,
-        shift_hours: hours
-      },
-      { onConflict: "production_line_id,shift_date,shift_name" }
-    );
-    setSavingLineId("");
-    setMessage(error ? error.message : "Shift manpower saved.");
-  }
-
-  return (
-    <section className="rounded-md bg-white p-5 shadow-touch">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Users size={28} className="text-ink" />
-          <h2 className="text-2xl font-black text-ink">Start-of-shift manpower</h2>
-        </div>
-        <select className="touch-target rounded-md border border-slate-300 px-4 text-lg font-black text-ink" value={shiftName} onChange={(event) => setShiftName(event.target.value)}>
-          <option value="Day">Day shift</option>
-          <option value="Night">Night shift</option>
-        </select>
-      </div>
-      <div className="mt-4 grid gap-3">
-        {lines.map((line) => (
-          <div key={line.id} className="grid gap-3 rounded-md bg-slate-100 p-4 md:grid-cols-[1fr_8rem_8rem_auto] md:items-center">
-            <p className="text-xl font-black text-ink">{line.name}</p>
-            <label className="grid gap-1 text-sm font-bold uppercase text-steel">
-              People
-              <input
-                className="touch-target w-full rounded-md border border-slate-300 px-4 text-2xl font-black text-ink"
-                type="number"
-                min="0"
-                inputMode="numeric"
-                value={crewCounts[line.id] ?? "0"}
-                onChange={(event) => setCrewCounts({ ...crewCounts, [line.id]: event.target.value })}
-              />
-            </label>
-            <label className="grid gap-1 text-sm font-bold uppercase text-steel">
-              Hours
-              <input
-                className="touch-target w-full rounded-md border border-slate-300 px-4 text-2xl font-black text-ink"
-                type="number"
-                min="0"
-                step="0.5"
-                inputMode="decimal"
-                value={shiftHours[line.id] ?? "8"}
-                onChange={(event) => setShiftHours({ ...shiftHours, [line.id]: event.target.value })}
-              />
-            </label>
-            <button
-              onClick={() => saveShift(line.id)}
-              className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white"
-            >
-              <Save size={22} /> {savingLineId === line.id ? "Saving" : "Save"}
-            </button>
-          </div>
-        ))}
-      </div>
-      {message ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-lg font-bold text-steel">{message}</p> : null}
     </section>
   );
 }
@@ -353,10 +259,6 @@ function groupBy<T>(items: T[], getName: (item: T) => string) {
     map.set(key, (map.get(key) ?? 0) + Number((item as { lineal_feet: number }).lineal_feet));
   });
   return Array.from(map, ([name, linealFeet]) => ({ name, linealFeet }));
-}
-
-function findShift(shifts: ShiftManpower[], lineId: string, date: string, shiftName: string) {
-  return shifts.find((shift) => shift.production_line_id === lineId && shift.shift_date === date && shift.shift_name === shiftName);
 }
 
 function completionDate(value: string) {

@@ -185,47 +185,103 @@ function toForm(wall: WallPanel): WallForm {
 
 function PdfUploader({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
 
   async function handleFile(file: File) {
-    setBusy("Converting PDF pages...");
-    const pdfjs = await import("pdfjs-dist");
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-    const supabase = createClient();
-    const bytes = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument({ data: bytes }).promise;
-    const pdfPath = `${projectId}/package-${Date.now()}.pdf`;
-    await supabase.storage.from("drawing-packages").upload(pdfPath, file, { upsert: true });
-    const { data: pdfPublic } = supabase.storage.from("drawing-packages").getPublicUrl(pdfPath);
-    await supabase.from("projects").update({ drawing_pdf_url: pdfPublic.publicUrl }).eq("id", projectId);
-
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-      setBusy(`Rendering page ${pageNumber} of ${pdf.numPages}...`);
-      const page = await pdf.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1.2 });
-      const canvas = document.createElement("canvas");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const context = canvas.getContext("2d");
-      if (!context) continue;
-      await page.render({ canvasContext: context, viewport }).promise;
-      const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/png"));
-      const imagePath = `${projectId}/page-${pageNumber}-${Date.now()}.png`;
-      await supabase.storage.from("drawing-pages").upload(imagePath, blob, { contentType: "image/png", upsert: true });
-      const { data } = supabase.storage.from("drawing-pages").getPublicUrl(imagePath);
-      await supabase.from("pdf_pages").upsert(
-        { project_id: projectId, page_number: pageNumber, image_url: data.publicUrl },
-        { onConflict: "project_id,page_number" }
-      );
+    if (!projectId) {
+      setError("Choose a project before uploading a PDF.");
+      return;
     }
 
-    setBusy("");
-    onDone();
+    setBusy("Converting PDF pages...");
+    setError("");
+
+    try {
+      const pdfjs = await import("pdfjs-dist");
+      pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+      const supabase = createClient();
+      const bytes = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+      const timestamp = Date.now();
+      const pdfPath = `${projectId}/package-${timestamp}.pdf`;
+      const { error: pdfUploadError } = await supabase.storage.from("drawing-packages").upload(pdfPath, file, { upsert: true });
+      if (pdfUploadError) throw pdfUploadError;
+
+      const { data: pdfPublic } = supabase.storage.from("drawing-packages").getPublicUrl(pdfPath);
+      const { error: projectError } = await supabase.from("projects").update({ drawing_pdf_url: pdfPublic.publicUrl }).eq("id", projectId);
+      if (projectError) throw projectError;
+
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        setBusy(`Rendering page ${pageNumber} of ${pdf.numPages}...`);
+        const page = await pdf.getPage(pageNumber);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(1.4, 1600 / Math.max(baseViewport.width, baseViewport.height));
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) throw new Error("The browser could not create a drawing preview.");
+
+        await page.render({ canvasContext: context, viewport }).promise;
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((value) => {
+            if (value) resolve(value);
+            else reject(new Error("The browser could not save the drawing preview."));
+          }, "image/jpeg", 0.82);
+        });
+
+        canvas.width = 1;
+        canvas.height = 1;
+
+        const imagePath = `${projectId}/page-${pageNumber}-${timestamp}.jpg`;
+        const { error: imageUploadError } = await supabase.storage.from("drawing-pages").upload(imagePath, blob, {
+          contentType: "image/jpeg",
+          upsert: true
+        });
+        if (imageUploadError) throw imageUploadError;
+
+        const { data } = supabase.storage.from("drawing-pages").getPublicUrl(imagePath);
+        const { error: pageError } = await supabase.from("pdf_pages").upsert(
+          { project_id: projectId, page_number: pageNumber, image_url: data.publicUrl },
+          { onConflict: "project_id,page_number" }
+        );
+        if (pageError) throw pageError;
+      }
+
+      onDone();
+    } catch (caught) {
+      setError(getErrorMessage(caught));
+    } finally {
+      setBusy("");
+    }
   }
 
   return (
-    <label className="touch-target inline-flex cursor-pointer items-center justify-center gap-3 rounded-md border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-5 text-xl font-black text-ink">
-      <FileUp size={28} /> {busy || "Upload PDF drawing package"}
-      <input className="sr-only" type="file" accept="application/pdf" onChange={(event) => event.target.files?.[0] && handleFile(event.target.files[0])} />
-    </label>
+    <div className="grid gap-3">
+      <label className="touch-target inline-flex cursor-pointer items-center justify-center gap-3 rounded-md border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-5 text-xl font-black text-ink">
+        <FileUp size={28} /> {busy || "Upload PDF drawing package"}
+        <input
+          className="sr-only"
+          type="file"
+          accept="application/pdf"
+          disabled={Boolean(busy)}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void handleFile(file);
+          }}
+        />
+      </label>
+      {error ? (
+        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{error}</p>
+      ) : null}
+    </div>
   );
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error && "message" in error) return String(error.message);
+  return "The PDF stopped converting. Try a smaller PDF, or split the drawing package into smaller files.";
 }

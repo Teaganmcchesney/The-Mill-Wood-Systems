@@ -38,11 +38,20 @@ export default async function ShopPage({
     .neq("status", "complete")
     .order("sort_order");
 
+  let completedWallQuery = supabase
+    .from("wall_panels")
+    .select("*, production_lines(name), pdf_pages(page_number, image_url), projects(name, code)")
+    .eq("production_line_id", activeLineId)
+    .eq("status", "complete")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
   if (activeProjectId !== "all") {
     wallQuery = wallQuery.eq("project_id", activeProjectId);
+    completedWallQuery = completedWallQuery.eq("project_id", activeProjectId);
   }
 
-  const { data: walls } = await wallQuery;
+  const [{ data: walls }, { data: completedWalls }] = await Promise.all([wallQuery, completedWallQuery]);
 
   return (
     <AppShell profile={profile}>
@@ -53,6 +62,7 @@ export default async function ShopPage({
         activeLineId={activeLineId}
         activeProjectId={activeProjectId}
         walls={walls ?? []}
+        lastCompletedWall={completedWalls?.[0] ?? null}
       />
     </AppShell>
   );

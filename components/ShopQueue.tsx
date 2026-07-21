@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, MoveLeft, MoveRight, RotateCcw } from "lucide-react";
+import { CheckCircle2, MoveRight, RotateCcw, SkipForward } from "lucide-react";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { WallNotesButton } from "@/components/WallNotesButton";
+import { ZoomableDrawing } from "@/components/ZoomableDrawing";
 import { createClient } from "@/lib/supabase-browser";
 import type { ProductionLine, Profile, Project } from "@/lib/types";
 
@@ -13,12 +15,14 @@ type JoinedProject = { name: string; code: string } | { name: string; code: stri
 
 type QueueWall = {
   id: string;
+  project_id: string;
   wall_id: string;
   wall_type: string;
   level: string;
   area_sqft: number;
   lineal_feet: number;
   production_line_id: string;
+  sort_order: number;
   pdf_pages: JoinedPage;
   projects: JoinedProject;
 };
@@ -101,7 +105,13 @@ export function ShopQueue({
 
       {activeWall ? (
         <>
-          <ActiveWall wall={activeWall} profile={profile} remainingCount={walls.length} lastCompletedWall={lastCompletedWall} />
+          <ActiveWall
+            wall={activeWall}
+            profile={profile}
+            remainingCount={walls.length}
+            activeProjectId={activeProjectId}
+            lastCompletedWall={lastCompletedWall}
+          />
           {nextWalls.length ? (
             <section className="rounded-md bg-white p-5 shadow-touch">
               <h2 className="text-2xl font-black text-ink">Coming up next</h2>
@@ -135,11 +145,13 @@ function ActiveWall({
   wall,
   profile,
   remainingCount,
+  activeProjectId,
   lastCompletedWall
 }: {
   wall: QueueWall;
   profile: Profile;
   remainingCount: number;
+  activeProjectId: string;
   lastCompletedWall: QueueWall | null;
 }) {
   const router = useRouter();
@@ -148,26 +160,63 @@ function ActiveWall({
   const page = firstJoined(wall.pdf_pages);
   const project = firstJoined(wall.projects);
   const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     x.set(0);
     setBusy(false);
+    setMessage("");
   }, [wall.id, x]);
 
   async function completeWall() {
     if (busy) return;
     setBusy(true);
+    setMessage("");
     const supabase = createClient();
     const { error } = await supabase.rpc("complete_wall_panel", {
       p_wall_panel_id: wall.id,
       p_completed_by: profile.id
     });
     if (error) {
+      setMessage(error.message);
       setBusy(false);
       x.set(0);
       return;
     }
     x.set(0);
+    router.refresh();
+  }
+
+  async function skipWall() {
+    if (busy) return;
+    setBusy(true);
+    setMessage("");
+    const supabase = createClient();
+    let maxQuery = supabase
+      .from("wall_panels")
+      .select("sort_order")
+      .eq("production_line_id", wall.production_line_id)
+      .neq("status", "complete")
+      .order("sort_order", { ascending: false })
+      .limit(1);
+
+    if (activeProjectId !== "all") maxQuery = maxQuery.eq("project_id", wall.project_id);
+
+    const { data: maxRows, error: maxError } = await maxQuery;
+    if (maxError) {
+      setMessage(maxError.message);
+      setBusy(false);
+      return;
+    }
+
+    const nextSortOrder = Number(maxRows?.[0]?.sort_order ?? wall.sort_order) + 10;
+    const { error } = await supabase.from("wall_panels").update({ sort_order: nextSortOrder }).eq("id", wall.id);
+    if (error) {
+      setMessage(error.message);
+      setBusy(false);
+      return;
+    }
+
     router.refresh();
   }
 
@@ -182,14 +231,7 @@ function ActiveWall({
       }}
       className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
     >
-      <div className="min-h-[62vh] overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-        {page?.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={page.image_url} alt={`Drawing page ${page.page_number}`} className="h-full max-h-[78vh] min-h-[62vh] w-full object-contain" />
-        ) : (
-          <div className="grid h-[62vh] place-items-center p-4 text-center text-2xl font-black text-steel">No drawing attached</div>
-        )}
-      </div>
+      <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" />
 
       <aside className="grid content-between gap-5">
         <div className="grid gap-4">
@@ -206,7 +248,17 @@ function ActiveWall({
         </div>
 
         <div className="grid gap-3">
-          {lastCompletedWall ? <UndoWallButton wall={lastCompletedWall} /> : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            {lastCompletedWall ? <UndoWallButton wall={lastCompletedWall} /> : null}
+            <button
+              onClick={skipWall}
+              disabled={busy}
+              className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <SkipForward size={30} /> {busy ? "Working..." : "Skip"}
+            </button>
+          </div>
+          <WallNotesButton wallId={wall.id} wallLabel={wall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${wall.level}` : wall.level} />
           <button
             onClick={completeWall}
             disabled={busy}
@@ -215,8 +267,9 @@ function ActiveWall({
             <CheckCircle2 size={34} /> {busy ? "Completing..." : "Complete"}
           </button>
           <p className="flex items-center gap-2 text-xl font-bold text-steel">
-            <MoveRight size={24} /> Swipe drawing right to complete
+            <MoveRight size={24} /> Swipe drawing right to complete. Pinch drawing to zoom.
           </p>
+          {message ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{message}</p> : null}
         </div>
       </aside>
     </motion.article>
@@ -227,27 +280,36 @@ function UndoWallButton({ wall, className = "" }: { wall: QueueWall; className?:
   const router = useRouter();
   const project = firstJoined(wall.projects);
   const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
 
   async function undoWall() {
     if (busy) return;
     setBusy(true);
+    setMessage("");
     const supabase = createClient();
     const { error } = await supabase.rpc("undo_wall_completion", {
       p_wall_panel_id: wall.id
     });
-    if (!error) router.refresh();
-    else setBusy(false);
+    if (!error) {
+      router.refresh();
+      return;
+    }
+    setMessage(error.message);
+    setBusy(false);
   }
 
   return (
-    <button
-      onClick={undoWall}
-      disabled={busy}
-      className={`touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
-    >
-      <RotateCcw size={30} />
-      {busy ? "Restoring..." : `Go back to ${project?.code ? `${project.code} / ` : ""}${wall.wall_id}`}
-    </button>
+    <div className={`grid gap-2 ${className}`}>
+      <button
+        onClick={undoWall}
+        disabled={busy}
+        className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <RotateCcw size={30} />
+        {busy ? "Restoring..." : `Go back ${project?.code ? `${project.code} / ` : ""}${wall.wall_id}`}
+      </button>
+      {message ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{message}</p> : null}
+    </div>
   );
 }
 

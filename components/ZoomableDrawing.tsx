@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 
 type Point = { x: number; y: number };
 
@@ -16,7 +16,7 @@ export function ZoomableDrawing({ imageUrl, alt, emptyText = "No drawing attache
   const lastDistance = useRef(0);
   const [scale, setScale] = useState(1);
 
-  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size >= 2) {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -24,7 +24,7 @@ export function ZoomableDrawing({ imageUrl, alt, emptyText = "No drawing attache
     }
   }
 
-  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
     if (!pointers.current.has(event.pointerId)) return;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size < 2) return;
@@ -40,7 +40,7 @@ export function ZoomableDrawing({ imageUrl, alt, emptyText = "No drawing attache
     lastDistance.current = nextDistance;
   }
 
-  function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
+  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     pointers.current.delete(event.pointerId);
     if (pointers.current.size < 2) lastDistance.current = 0;
   }

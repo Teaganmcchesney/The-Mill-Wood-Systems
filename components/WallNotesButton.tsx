@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Eraser, NotebookPen, Save, X } from "lucide-react";
 import { createClient } from "@/lib/supabase-browser";
 
@@ -109,14 +109,14 @@ function WallNotesModal({
     onClose();
   }
 
-  function startLine(event: React.PointerEvent<HTMLDivElement>) {
+  function startLine(event: PointerEvent<HTMLDivElement>) {
     const point = relativePoint(event);
     if (!point) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     setDraft(point);
   }
 
-  function moveLine(event: React.PointerEvent<HTMLDivElement>) {
+  function moveLine(event: PointerEvent<HTMLDivElement>) {
     if (!draft) return;
     const point = relativePoint(event);
     if (!point) return;
@@ -129,7 +129,7 @@ function WallNotesModal({
     setDraft("");
   }
 
-  function relativePoint(event: React.PointerEvent<HTMLDivElement>) {
+  function relativePoint(event: PointerEvent<HTMLDivElement>) {
     const box = drawingRef.current?.getBoundingClientRect();
     if (!box) return null;
     const x = ((event.clientX - box.left) / box.width) * 1000;

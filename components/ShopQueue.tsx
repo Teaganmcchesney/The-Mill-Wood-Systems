@@ -12,6 +12,7 @@ import type { ProductionLine, Profile, Project } from "@/lib/types";
 
 type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
+type JoinedNote = { markup_data: unknown } | { markup_data: unknown }[] | null;
 
 type QueueWall = {
   id: string;
@@ -25,6 +26,7 @@ type QueueWall = {
   sort_order: number;
   pdf_pages: JoinedPage;
   projects: JoinedProject;
+  wall_notes: JoinedNote;
 };
 
 export function ShopQueue({
@@ -159,6 +161,7 @@ function ActiveWall({
   const background = useTransform(x, [0, 220], ["#ffffff", "#dcfce7"]);
   const page = firstJoined(wall.pdf_pages);
   const project = firstJoined(wall.projects);
+  const note = firstJoined(wall.wall_notes);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -231,7 +234,7 @@ function ActiveWall({
       }}
       className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
     >
-      <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" />
+      <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" markupData={note?.markup_data} />
 
       <aside className="grid content-between gap-5">
         <div className="grid gap-4">
@@ -258,7 +261,7 @@ function ActiveWall({
               <SkipForward size={30} /> {busy ? "Working..." : "Skip"}
             </button>
           </div>
-          <WallNotesButton wallId={wall.id} wallLabel={wall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${wall.level}` : wall.level} />
+          <WallNotesButton wallId={wall.id} wallLabel={wall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${wall.level}` : wall.level} onSaved={() => router.refresh()} />
           <button
             onClick={completeWall}
             disabled={busy}

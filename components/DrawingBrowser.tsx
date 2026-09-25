@@ -11,6 +11,7 @@ import type { ProductionLine } from "@/lib/types";
 type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
 type JoinedProject = { id: string; name: string; code: string } | { id: string; name: string; code: string }[] | null;
 type JoinedLine = { name: string } | { name: string }[] | null;
+type JoinedNote = { markup_data: unknown } | { markup_data: unknown }[] | null;
 
 type DrawingWall = {
   id: string;
@@ -25,6 +26,7 @@ type DrawingWall = {
   pdf_pages: JoinedPage;
   projects: JoinedProject;
   production_lines: JoinedLine;
+  wall_notes: JoinedNote;
 };
 
 export function DrawingBrowser({ walls, lines }: { walls: DrawingWall[]; lines: ProductionLine[] }) {
@@ -49,6 +51,7 @@ export function DrawingBrowser({ walls, lines }: { walls: DrawingWall[]; lines: 
   const activeWall = filteredWalls.find((wall) => wall.id === activeId) ?? filteredWalls[0] ?? null;
   const page = firstJoined(activeWall?.pdf_pages ?? null);
   const project = firstJoined(activeWall?.projects ?? null);
+  const note = firstJoined(activeWall?.wall_notes ?? null);
 
   async function moveWall(beforeId: string) {
     if (!draggedId || draggedId === beforeId) return;
@@ -188,7 +191,7 @@ export function DrawingBrowser({ walls, lines }: { walls: DrawingWall[]; lines: 
 
       {activeWall ? (
         <section className="grid gap-5 rounded-md bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[64vh]" emptyText="No drawing attached" />
+          <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[64vh]" emptyText="No drawing attached" markupData={note?.markup_data} />
           <aside className="grid content-start gap-4">
             <div>
               <p className="text-xl font-bold text-steel">{project?.code} / {activeWall.level}</p>
@@ -212,7 +215,7 @@ export function DrawingBrowser({ walls, lines }: { walls: DrawingWall[]; lines: 
                 }}
               />
             </label>
-            <WallNotesButton wallId={activeWall.id} wallLabel={activeWall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${activeWall.level}` : activeWall.level} />
+            <WallNotesButton wallId={activeWall.id} wallLabel={activeWall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${activeWall.level}` : activeWall.level} onSaved={() => router.refresh()} />
           </aside>
         </section>
       ) : (

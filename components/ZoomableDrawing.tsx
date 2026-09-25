@@ -11,13 +11,22 @@ type ZoomableDrawingProps = {
   emptyText?: string;
   className?: string;
   markupData?: unknown;
+  noteText?: string | null;
 };
 
-export function ZoomableDrawing({ imageUrl, alt, emptyText = "No drawing attached", className = "", markupData }: ZoomableDrawingProps) {
+export function ZoomableDrawing({
+  imageUrl,
+  alt,
+  emptyText = "No drawing attached",
+  className = "",
+  markupData,
+  noteText
+}: ZoomableDrawingProps) {
   const pointers = useRef(new Map<number, Point>());
   const lastDistance = useRef(0);
   const [scale, setScale] = useState(1);
   const lines = parseLines(markupData);
+  const visibleNote = noteText?.trim();
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -61,6 +70,11 @@ export function ZoomableDrawing({ imageUrl, alt, emptyText = "No drawing attache
         <div className="relative m-auto h-full max-h-[78vh] min-h-[62vh] w-full transition-transform duration-100" style={{ transform: `scale(${scale})` }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt={alt} draggable={false} className="absolute inset-0 h-full w-full object-contain" />
+          {visibleNote ? (
+            <div className="pointer-events-none absolute left-[5%] top-[4%] max-h-[20%] max-w-[42%] overflow-hidden whitespace-pre-wrap rounded-md bg-white/90 px-4 py-3 text-xl font-black leading-tight text-red-600 shadow-touch ring-2 ring-red-500/20 md:text-2xl">
+              {visibleNote}
+            </div>
+          ) : null}
           {lines.length ? (
             <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
               {lines.map((line, index) => (

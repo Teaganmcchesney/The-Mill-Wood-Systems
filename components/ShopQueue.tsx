@@ -12,7 +12,7 @@ import type { ProductionLine, Profile, Project } from "@/lib/types";
 
 type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
-type JoinedNote = { markup_data: unknown } | { markup_data: unknown }[] | null;
+type JoinedNote = { markup_data: unknown; note_text: string | null } | { markup_data: unknown; note_text: string | null }[] | null;
 
 type QueueWall = {
   id: string;
@@ -234,7 +234,7 @@ function ActiveWall({
       }}
       className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
     >
-      <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" markupData={note?.markup_data} />
+      <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" markupData={note?.markup_data} noteText={note?.note_text} />
 
       <aside className="grid content-between gap-5">
         <div className="grid gap-4">

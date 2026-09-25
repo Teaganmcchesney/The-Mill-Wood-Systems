@@ -50,4 +50,8 @@ export type WallPanel = {
   production_line_id: string;
   status: WallStatus;
   sort_order: number;
+  yard_status?: string | null;
+  bundle_label?: string | null;
+  yard_location?: string | null;
+  yard_notes?: string | null;
 };

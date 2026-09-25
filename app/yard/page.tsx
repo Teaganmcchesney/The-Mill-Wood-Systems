@@ -11,7 +11,7 @@ export default async function YardPage() {
   const supabase = createClient();
   const { data: walls } = await supabase
     .from("wall_panels")
-    .select("id, wall_id, wall_type, level, lineal_feet, status, yard_status, bundle_label, yard_location, yard_notes, updated_at, projects(id, name, code), production_lines(name)")
+    .select("id, wall_id, wall_type, level, lineal_feet, status, yard_status, bundle_label, yard_location, yard_notes, updated_at, projects(id, name, code), production_lines(name), pdf_pages(page_number, image_url), wall_notes(note_text, markup_data)")
     .eq("status", "complete")
     .order("updated_at", { ascending: false });
 

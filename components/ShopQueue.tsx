@@ -32,6 +32,7 @@ type QueueWall = {
 
 const QAQC_ITEMS = [
   { id: "wall_square", label: "Wall is square" },
+  { id: "correct_length", label: "Correct length" },
   { id: "correct_ros", label: "Correct RO's" },
   { id: "sheathing_overhang", label: "Sheathing overhang" },
   { id: "end_sheathing_flush", label: "End sheathing flush" },

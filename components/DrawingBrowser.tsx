@@ -11,7 +11,7 @@ import type { ProductionLine } from "@/lib/types";
 type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
 type JoinedProject = { id: string; name: string; code: string } | { id: string; name: string; code: string }[] | null;
 type JoinedLine = { name: string } | { name: string }[] | null;
-type JoinedNote = { markup_data: unknown } | { markup_data: unknown }[] | null;
+type JoinedNote = { markup_data: unknown; note_text: string | null } | { markup_data: unknown; note_text: string | null }[] | null;
 
 type DrawingWall = {
   id: string;
@@ -191,7 +191,7 @@ export function DrawingBrowser({ walls, lines }: { walls: DrawingWall[]; lines: 
 
       {activeWall ? (
         <section className="grid gap-5 rounded-md bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[64vh]" emptyText="No drawing attached" markupData={note?.markup_data} />
+          <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[64vh]" emptyText="No drawing attached" markupData={note?.markup_data} noteText={note?.note_text} />
           <aside className="grid content-start gap-4">
             <div>
               <p className="text-xl font-bold text-steel">{project?.code} / {activeWall.level}</p>

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Eraser, NotebookPen, Save, X } from "lucide-react";
 import { createClient } from "@/lib/supabase-browser";
 
-type Line = { points: string; color: string };
+type Point = { x: number; y: number };
+type Line = { points: Point[]; color: string; width: number };
 
 type WallNotesButtonProps = {
   wallId: string;
@@ -53,10 +54,12 @@ function WallNotesModal({
 }) {
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState<Line | null>(null);
   const [busy, setBusy] = useState("Loading notes...");
   const [error, setError] = useState("");
   const drawingRef = useRef<HTMLDivElement | null>(null);
+  const activePointerId = useRef<number | null>(null);
+  const draftRef = useRef<Line | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +79,9 @@ function WallNotesModal({
       } else if (data) {
         setNote(data.note_text ?? "");
         setLines(parseLines(data.markup_data));
+      } else {
+        setNote("");
+        setLines([]);
       }
       setBusy("");
     }
@@ -94,7 +100,7 @@ function WallNotesModal({
       {
         wall_panel_id: wallId,
         note_text: note,
-        markup_data: { lines }
+        markup_data: { version: 2, lines }
       },
       { onConflict: "wall_panel_id" }
     );
@@ -110,31 +116,48 @@ function WallNotesModal({
   }
 
   function startLine(event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
     const point = relativePoint(event);
     if (!point) return;
+    activePointerId.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
-    setDraft(point);
+    const nextDraft = { points: [point], color: "#f2c94c", width: 7 };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
   }
 
   function moveLine(event: PointerEvent<HTMLDivElement>) {
-    if (!draft) return;
+    if (activePointerId.current !== event.pointerId || !draftRef.current) return;
+    event.preventDefault();
     const point = relativePoint(event);
     if (!point) return;
-    setDraft((current) => `${current} ${point}`);
+    const current = draftRef.current;
+    const previous = current.points[current.points.length - 1];
+    if (previous && Math.abs(previous.x - point.x) < 1 && Math.abs(previous.y - point.y) < 1) return;
+    const nextDraft = { ...current, points: [...current.points, point] };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
   }
 
-  function endLine() {
-    if (!draft) return;
-    setLines((current) => [...current, { points: draft, color: "#f2c94c" }]);
-    setDraft("");
+  function endLine(event?: PointerEvent<HTMLDivElement>) {
+    if (event && activePointerId.current !== event.pointerId) return;
+    const finished = draftRef.current;
+    activePointerId.current = null;
+    draftRef.current = null;
+    setDraft(null);
+    if (!finished || finished.points.length < 2) return;
+    setLines((current) => [...current, finished]);
   }
 
   function relativePoint(event: PointerEvent<HTMLDivElement>) {
     const box = drawingRef.current?.getBoundingClientRect();
-    if (!box) return null;
+    if (!box || !box.width || !box.height) return null;
     const x = ((event.clientX - box.left) / box.width) * 1000;
     const y = ((event.clientY - box.top) / box.height) * 1000;
-    return `${Math.max(0, Math.min(1000, Math.round(x)))},${Math.max(0, Math.min(1000, Math.round(y)))}`;
+    return {
+      x: Math.max(0, Math.min(1000, Math.round(x))),
+      y: Math.max(0, Math.min(1000, Math.round(y)))
+    };
   }
 
   return (
@@ -157,7 +180,9 @@ function WallNotesModal({
             onPointerMove={moveLine}
             onPointerUp={endLine}
             onPointerCancel={endLine}
-            className="relative min-h-[58vh] overflow-hidden rounded-md border border-slate-300 bg-slate-100 touch-none"
+            onPointerLeave={endLine}
+            className="relative min-h-[58vh] overflow-hidden rounded-md border border-slate-300 bg-slate-100 touch-none select-none"
+            style={{ touchAction: "none" }}
           >
             {imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -166,10 +191,11 @@ function WallNotesModal({
               <div className="grid h-full place-items-center text-2xl font-black text-steel">No drawing attached</div>
             )}
             <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+              <rect width="1000" height="1000" fill="transparent" />
               {lines.map((line, index) => (
-                <polyline key={`${line.points}-${index}`} points={line.points} fill="none" stroke={line.color} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline key={`${line.points.length}-${index}`} points={line.points.map(pointToString).join(" ")} fill="none" stroke={line.color} strokeWidth={line.width} strokeLinecap="round" strokeLinejoin="round" />
               ))}
-              {draft ? <polyline points={draft} fill="none" stroke="#f2c94c" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" /> : null}
+              {draft ? <polyline points={draft.points.map(pointToString).join(" ")} fill="none" stroke={draft.color} strokeWidth={draft.width} strokeLinecap="round" strokeLinejoin="round" /> : null}
             </svg>
           </div>
         </div>
@@ -192,7 +218,7 @@ function WallNotesModal({
               <Save size={24} /> {busy || "Save"}
             </button>
           </div>
-          <p className="rounded-md bg-slate-100 p-3 text-base font-bold text-steel">Draw with your finger or stylus on the drawing. Use the note box for longer comments.</p>
+          <p className="rounded-md bg-slate-100 p-3 text-base font-bold text-steel">Draw directly on the wall drawing with a stylus, mouse, or finger. Click Save to keep the markup with this wall.</p>
           {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{error}</p> : null}
         </aside>
       </section>
@@ -200,20 +226,47 @@ function WallNotesModal({
   );
 }
 
+function pointToString(point: Point) {
+  return `${point.x},${point.y}`;
+}
+
 function parseLines(value: unknown): Line[] {
   if (!value || typeof value !== "object" || !("lines" in value)) return [];
   const lines = (value as { lines?: unknown }).lines;
   if (!Array.isArray(lines)) return [];
-  return lines.filter(isLine);
+  return lines.map(normalizeLine).filter(Boolean) as Line[];
 }
 
-function isLine(value: unknown): value is Line {
+function normalizeLine(value: unknown): Line | null {
+  if (!value || typeof value !== "object") return null;
+  const color = typeof (value as { color?: unknown }).color === "string" ? (value as { color: string }).color : "#f2c94c";
+  const width = typeof (value as { width?: unknown }).width === "number" ? (value as { width: number }).width : 7;
+  const rawPoints = (value as { points?: unknown }).points;
+
+  if (Array.isArray(rawPoints)) {
+    const points = rawPoints.filter(isPoint);
+    return points.length ? { points, color, width } : null;
+  }
+
+  if (typeof rawPoints === "string") {
+    const points = rawPoints
+      .split(/\s+/)
+      .map((item) => {
+        const [x, y] = item.split(",").map(Number);
+        return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+      })
+      .filter(Boolean) as Point[];
+    return points.length ? { points, color, width } : null;
+  }
+
+  return null;
+}
+
+function isPoint(value: unknown): value is Point {
   return (
     typeof value === "object" &&
     value !== null &&
-    "points" in value &&
-    "color" in value &&
-    typeof (value as { points?: unknown }).points === "string" &&
-    typeof (value as { color?: unknown }).color === "string"
+    typeof (value as { x?: unknown }).x === "number" &&
+    typeof (value as { y?: unknown }).y === "number"
   );
 }

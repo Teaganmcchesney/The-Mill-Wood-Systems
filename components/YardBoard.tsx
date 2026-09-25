@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Save } from "lucide-react";
+import { Eye, Save } from "lucide-react";
+import { ZoomableDrawing } from "@/components/ZoomableDrawing";
 import { createClient } from "@/lib/supabase-browser";
 
 type JoinedProject = { id: string; name: string; code: string } | { id: string; name: string; code: string }[] | null;
 type JoinedLine = { name: string } | { name: string }[] | null;
+type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
+type JoinedNote = { markup_data: unknown; note_text: string | null } | { markup_data: unknown; note_text: string | null }[] | null;
 
 type YardWall = {
   id: string;
@@ -21,6 +24,8 @@ type YardWall = {
   updated_at: string;
   projects: JoinedProject;
   production_lines: JoinedLine;
+  pdf_pages: JoinedPage;
+  wall_notes: JoinedNote;
 };
 
 type YardDraft = {
@@ -37,6 +42,7 @@ export function YardBoard({ walls }: { walls: YardWall[] }) {
   const [drafts, setDrafts] = useState<Record<string, YardDraft>>(() => Object.fromEntries(walls.map((wall) => [wall.id, draftFromWall(wall)])));
   const [savingId, setSavingId] = useState("");
   const [error, setError] = useState("");
+  const [openDrawingId, setOpenDrawingId] = useState(walls[0]?.id ?? "");
   const projects = uniqueProjects(rows);
   const [projectKey, setProjectKey] = useState("all");
   const filteredRows = rows.filter((wall) => projectKey === "all" || projectKeyFor(wall.projects) === projectKey);
@@ -103,30 +109,53 @@ export function YardBoard({ walls }: { walls: YardWall[] }) {
             {bundle.walls.map((wall) => {
               const project = firstJoined(wall.projects);
               const line = firstJoined(wall.production_lines);
+              const page = firstJoined(wall.pdf_pages);
+              const note = firstJoined(wall.wall_notes);
               const draft = drafts[wall.id] ?? emptyDraft();
+              const drawingOpen = openDrawingId === wall.id;
               return (
-                <article key={wall.id} className="grid gap-3 rounded-md bg-slate-100 p-4 xl:grid-cols-[1fr_10rem_10rem_10rem_1fr_auto] xl:items-end">
-                  <div>
-                    <p className="text-base font-bold text-steel">{project?.code} / {wall.level} / {line?.name ?? "Line"}</p>
-                    <h3 className="text-3xl font-black text-ink">{wall.wall_id}</h3>
-                    <p className="text-lg font-bold text-steel">{wall.wall_type} / {Number(wall.lineal_feet).toFixed(1)} LF</p>
+                <article key={wall.id} className="grid gap-4 rounded-md bg-slate-100 p-4">
+                  <div className="grid gap-3 xl:grid-cols-[1fr_10rem_10rem_10rem_1fr_auto] xl:items-end">
+                    <div>
+                      <p className="text-base font-bold text-steel">{project?.code} / {wall.level} / {line?.name ?? "Line"}</p>
+                      <h3 className="text-3xl font-black text-ink">{wall.wall_id}</h3>
+                      <p className="text-lg font-bold text-steel">{wall.wall_type} / {Number(wall.lineal_feet).toFixed(1)} LF</p>
+                    </div>
+                    <Field label="Bundle" value={draft.bundle_label} onChange={(value) => updateDraft(wall.id, { bundle_label: value })} />
+                    <Field label="Location" value={draft.yard_location} onChange={(value) => updateDraft(wall.id, { yard_location: value })} />
+                    <label className="grid gap-2 text-base font-bold text-ink">
+                      Status
+                      <select className="touch-target rounded-md border border-slate-300 px-3" value={draft.yard_status} onChange={(event) => updateDraft(wall.id, { yard_status: event.target.value })}>
+                        {YARD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                    </label>
+                    <Field label="Notes" value={draft.yard_notes} onChange={(value) => updateDraft(wall.id, { yard_notes: value })} />
+                    <button
+                      onClick={() => void saveWall(wall)}
+                      disabled={savingId === wall.id}
+                      className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white disabled:opacity-60"
+                    >
+                      <Save size={22} /> {savingId === wall.id ? "Saving..." : "Save"}
+                    </button>
                   </div>
-                  <Field label="Bundle" value={draft.bundle_label} onChange={(value) => updateDraft(wall.id, { bundle_label: value })} />
-                  <Field label="Location" value={draft.yard_location} onChange={(value) => updateDraft(wall.id, { yard_location: value })} />
-                  <label className="grid gap-2 text-base font-bold text-ink">
-                    Status
-                    <select className="touch-target rounded-md border border-slate-300 px-3" value={draft.yard_status} onChange={(event) => updateDraft(wall.id, { yard_status: event.target.value })}>
-                      {YARD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
-                  </label>
-                  <Field label="Notes" value={draft.yard_notes} onChange={(value) => updateDraft(wall.id, { yard_notes: value })} />
+
                   <button
-                    onClick={() => void saveWall(wall)}
-                    disabled={savingId === wall.id}
-                    className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-3 text-lg font-black text-white disabled:opacity-60"
+                    onClick={() => setOpenDrawingId(drawingOpen ? "" : wall.id)}
+                    className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-white px-5 py-4 text-2xl font-black text-ink shadow-touch"
                   >
-                    <Save size={22} /> {savingId === wall.id ? "Saving..." : "Save"}
+                    <Eye size={30} /> {drawingOpen ? "Hide drawing" : "View drawing"}
                   </button>
+
+                  {drawingOpen ? (
+                    <ZoomableDrawing
+                      imageUrl={page?.image_url}
+                      alt={`Completed drawing for ${wall.wall_id}`}
+                      className="min-h-[58vh] bg-white"
+                      emptyText="No completed drawing attached"
+                      markupData={note?.markup_data}
+                      noteText={note?.note_text}
+                    />
+                  ) : null}
                 </article>
               );
             })}

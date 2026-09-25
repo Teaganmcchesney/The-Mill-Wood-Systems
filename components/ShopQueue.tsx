@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, MoveRight, RotateCcw, SkipForward } from "lucide-react";
+import { CheckCircle2, MoveRight, RotateCcw, ShieldCheck, SkipForward, X } from "lucide-react";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { WallNotesButton } from "@/components/WallNotesButton";
@@ -13,6 +13,7 @@ import type { ProductionLine, Profile, Project } from "@/lib/types";
 type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
 type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
 type JoinedNote = { markup_data: unknown; note_text: string | null } | { markup_data: unknown; note_text: string | null }[] | null;
+type QaqcChecks = Record<string, boolean>;
 
 type QueueWall = {
   id: string;
@@ -28,6 +29,20 @@ type QueueWall = {
   projects: JoinedProject;
   wall_notes: JoinedNote;
 };
+
+const QAQC_ITEMS = [
+  { id: "wall_square", label: "Wall is square" },
+  { id: "correct_ros", label: "Correct RO's" },
+  { id: "sheathing_overhang", label: "Sheathing overhang" },
+  { id: "end_sheathing_flush", label: "End sheathing flush" },
+  { id: "correct_nail_pattern", label: "Correct nail pattern" },
+  { id: "correct_nail_type", label: "Correct nail type" },
+  { id: "straight_end_stud", label: "Straight end stud" },
+  { id: "wain_down_top_plate", label: "Wain down on top plate" },
+  { id: "wain_out_window_sill", label: "Wain out on window sill" },
+  { id: "correct_poly_lap", label: "Correct poly lap" },
+  { id: "correct_label", label: "Correct label" }
+];
 
 export function ShopQueue({
   profile,
@@ -164,18 +179,36 @@ function ActiveWall({
   const note = firstJoined(wall.wall_notes);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [qaqcOpen, setQaqcOpen] = useState(false);
 
   useEffect(() => {
     x.set(0);
     setBusy(false);
     setMessage("");
+    setQaqcOpen(false);
   }, [wall.id, x]);
 
-  async function completeWall() {
+  async function completeWall(checks: QaqcChecks) {
     if (busy) return;
     setBusy(true);
     setMessage("");
     const supabase = createClient();
+    const { error: checkError } = await supabase.from("wall_qaqc_checks").upsert(
+      {
+        wall_panel_id: wall.id,
+        checklist: checks,
+        checked_by: profile.id,
+        checked_at: new Date().toISOString()
+      },
+      { onConflict: "wall_panel_id" }
+    );
+
+    if (checkError) {
+      setMessage(checkError.message);
+      setBusy(false);
+      return;
+    }
+
     const { error } = await supabase.rpc("complete_wall_panel", {
       p_wall_panel_id: wall.id,
       p_completed_by: profile.id
@@ -187,7 +220,15 @@ function ActiveWall({
       return;
     }
     x.set(0);
+    setQaqcOpen(false);
     router.refresh();
+  }
+
+  function openQaqc() {
+    if (busy) return;
+    setMessage("");
+    setQaqcOpen(true);
+    x.set(0);
   }
 
   async function skipWall() {
@@ -224,58 +265,144 @@ function ActiveWall({
   }
 
   return (
-    <motion.article
-      drag={busy ? false : "x"}
-      dragConstraints={{ left: 0, right: 260 }}
-      style={{ x, background }}
-      onDragEnd={(_, info) => {
-        if (info.offset.x > 170) void completeWall();
-        else x.set(0);
-      }}
-      className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
-    >
-      <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" markupData={note?.markup_data} noteText={note?.note_text} />
+    <>
+      <motion.article
+        drag={busy ? false : "x"}
+        dragConstraints={{ left: 0, right: 260 }}
+        style={{ x, background }}
+        onDragEnd={(_, info) => {
+          if (info.offset.x > 170) openQaqc();
+          else x.set(0);
+        }}
+        className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
+      >
+        <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" markupData={note?.markup_data} noteText={note?.note_text} />
 
-      <aside className="grid content-between gap-5">
-        <div className="grid gap-4">
-          <div>
-            <p className="text-xl font-bold text-steel">{project?.code} / {wall.level}</p>
-            <h2 className="text-6xl font-black text-ink">{wall.wall_id}</h2>
+        <aside className="grid content-between gap-5">
+          <div className="grid gap-4">
+            <div>
+              <p className="text-xl font-bold text-steel">{project?.code} / {wall.level}</p>
+              <h2 className="text-6xl font-black text-ink">{wall.wall_id}</h2>
+            </div>
+            <span className="w-fit rounded-md bg-shop px-5 py-3 text-2xl font-black text-ink">{wall.wall_type}</span>
+            <div className="grid grid-cols-3 gap-3">
+              <Metric label="Lineal feet" value={wall.lineal_feet.toFixed(1)} />
+              <Metric label="Page" value={page ? String(page.page_number) : "-"} />
+              <Metric label="Queue" value={String(remainingCount)} />
+            </div>
           </div>
-          <span className="w-fit rounded-md bg-shop px-5 py-3 text-2xl font-black text-ink">{wall.wall_type}</span>
-          <div className="grid grid-cols-3 gap-3">
-            <Metric label="Lineal feet" value={wall.lineal_feet.toFixed(1)} />
-            <Metric label="Page" value={page ? String(page.page_number) : "-"} />
-            <Metric label="Queue" value={String(remainingCount)} />
-          </div>
-        </div>
 
-        <div className="grid gap-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            {lastCompletedWall ? <UndoWallButton wall={lastCompletedWall} /> : null}
+          <div className="grid gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              {lastCompletedWall ? <UndoWallButton wall={lastCompletedWall} /> : null}
+              <button
+                onClick={skipWall}
+                disabled={busy}
+                className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <SkipForward size={30} /> {busy ? "Working..." : "Skip"}
+              </button>
+            </div>
+            <WallNotesButton wallId={wall.id} wallLabel={wall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${wall.level}` : wall.level} onSaved={() => router.refresh()} />
             <button
-              onClick={skipWall}
+              onClick={openQaqc}
               disabled={busy}
-              className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"
+              className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-pass px-6 py-5 text-3xl font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <SkipForward size={30} /> {busy ? "Working..." : "Skip"}
+              <ShieldCheck size={34} /> {busy ? "Completing..." : "QA/QC First"}
             </button>
+            <p className="flex items-center gap-2 text-xl font-bold text-steel">
+              <MoveRight size={24} /> Swipe drawing right to open QA/QC. Pinch drawing to zoom.
+            </p>
+            {message ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{message}</p> : null}
           </div>
-          <WallNotesButton wallId={wall.id} wallLabel={wall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${wall.level}` : wall.level} onSaved={() => router.refresh()} />
-          <button
-            onClick={completeWall}
-            disabled={busy}
-            className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-pass px-6 py-5 text-3xl font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <CheckCircle2 size={34} /> {busy ? "Completing..." : "Complete"}
+        </aside>
+      </motion.article>
+      {qaqcOpen ? (
+        <QaqcModal
+          wallLabel={wall.wall_id}
+          pageLabel={project ? `${project.code} / ${wall.level}` : wall.level}
+          busy={busy}
+          error={message}
+          onClose={() => setQaqcOpen(false)}
+          onComplete={(checks) => void completeWall(checks)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function QaqcModal({
+  wallLabel,
+  pageLabel,
+  busy,
+  error,
+  onClose,
+  onComplete
+}: {
+  wallLabel: string;
+  pageLabel: string;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onComplete: (checks: QaqcChecks) => void;
+}) {
+  const [checks, setChecks] = useState<QaqcChecks>(() => Object.fromEntries(QAQC_ITEMS.map((item) => [item.id, false])));
+  const complete = useMemo(() => QAQC_ITEMS.every((item) => checks[item.id]), [checks]);
+  const checkedCount = QAQC_ITEMS.filter((item) => checks[item.id]).length;
+
+  function toggle(id: string) {
+    setChecks((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid bg-black/80 p-4 lg:p-8">
+      <section className="m-auto grid max-h-full w-full max-w-5xl gap-5 overflow-auto rounded-md bg-white p-5 shadow-touch">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-lg font-bold text-steel">{pageLabel}</p>
+            <h2 className="text-4xl font-black text-ink">QA/QC for {wallLabel}</h2>
+            <p className="mt-1 text-xl font-bold text-steel">{checkedCount} of {QAQC_ITEMS.length} checked</p>
+          </div>
+          <button onClick={onClose} disabled={busy} className="touch-target rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink disabled:opacity-60">
+            <X size={26} />
           </button>
-          <p className="flex items-center gap-2 text-xl font-bold text-steel">
-            <MoveRight size={24} /> Swipe drawing right to complete. Pinch drawing to zoom.
-          </p>
-          {message ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{message}</p> : null}
         </div>
-      </aside>
-    </motion.article>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {QAQC_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => toggle(item.id)}
+              disabled={busy}
+              className={`touch-target flex items-center justify-between gap-4 rounded-md border-2 p-5 text-left text-2xl font-black disabled:opacity-60 ${
+                checks[item.id] ? "border-pass bg-green-50 text-ink" : "border-slate-200 bg-slate-100 text-ink"
+              }`}
+            >
+              <span>{item.label}</span>
+              <span className={`grid size-11 shrink-0 place-items-center rounded-md border-2 ${checks[item.id] ? "border-pass bg-pass text-white" : "border-slate-300 bg-white text-transparent"}`}>
+                <CheckCircle2 size={30} />
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{error}</p> : null}
+
+        <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
+          <button onClick={onClose} disabled={busy} className="touch-target rounded-md bg-slate-100 px-6 py-5 text-2xl font-black text-ink disabled:opacity-60">
+            Back to wall
+          </button>
+          <button
+            onClick={() => onComplete(checks)}
+            disabled={busy || !complete}
+            className="touch-target inline-flex items-center justify-center gap-3 rounded-md bg-pass px-6 py-5 text-3xl font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-steel"
+          >
+            <CheckCircle2 size={34} /> {busy ? "Completing..." : complete ? "Complete" : "Check all items first"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 

@@ -13,9 +13,10 @@ type WallNotesButtonProps = {
   imageUrl?: string | null;
   pageLabel?: string;
   className?: string;
+  onSaved?: () => void;
 };
 
-export function WallNotesButton({ wallId, wallLabel, imageUrl, pageLabel, className = "" }: WallNotesButtonProps) {
+export function WallNotesButton({ wallId, wallLabel, imageUrl, pageLabel, className = "", onSaved }: WallNotesButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -33,6 +34,7 @@ export function WallNotesButton({ wallId, wallLabel, imageUrl, pageLabel, classN
           imageUrl={imageUrl}
           pageLabel={pageLabel}
           onClose={() => setOpen(false)}
+          onSaved={onSaved}
         />
       ) : null}
     </>
@@ -44,13 +46,15 @@ function WallNotesModal({
   wallLabel,
   imageUrl,
   pageLabel,
-  onClose
+  onClose,
+  onSaved
 }: {
   wallId: string;
   wallLabel: string;
   imageUrl?: string | null;
   pageLabel?: string;
   onClose: () => void;
+  onSaved?: () => void;
 }) {
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
@@ -112,6 +116,7 @@ function WallNotesModal({
     }
 
     setBusy("");
+    onSaved?.();
     onClose();
   }
 
@@ -215,10 +220,10 @@ function WallNotesModal({
               <Eraser size={24} /> Clear marks
             </button>
             <button onClick={saveNote} disabled={Boolean(busy)} className="touch-target inline-flex items-center justify-center gap-2 rounded-md bg-ink px-5 py-4 text-lg font-black text-white disabled:opacity-60">
-              <Save size={24} /> {busy || "Save"}
+              <Save size={24} /> {busy || "Save & close"}
             </button>
           </div>
-          <p className="rounded-md bg-slate-100 p-3 text-base font-bold text-steel">Draw directly on the wall drawing with a stylus, mouse, or finger. Click Save to keep the markup with this wall.</p>
+          <p className="rounded-md bg-slate-100 p-3 text-base font-bold text-steel">Draw directly on the wall drawing with a stylus, mouse, or finger. Click Save & close to show the writing on the production sheet.</p>
           {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{error}</p> : null}
         </aside>
       </section>

@@ -13,7 +13,8 @@ export default async function DrawingsPage() {
     supabase.from("production_lines").select("*").order("sort_order"),
     supabase
       .from("wall_panels")
-      .select("id, wall_id, wall_type, level, lineal_feet, production_line_id, pdf_pages(page_number, image_url), projects(id, name, code), production_lines(name)")
+      .select("id, project_id, wall_id, wall_type, level, lineal_feet, production_line_id, pdf_page_id, sort_order, pdf_pages(page_number, image_url), projects(id, name, code), production_lines(name)")
+      .order("sort_order")
       .order("wall_id")
   ]);
 

@@ -33,14 +33,14 @@ export default async function ShopPage({
 
   let wallQuery = supabase
     .from("wall_panels")
-    .select("*, production_lines(name), pdf_pages(page_number, image_url), projects(name, code)")
+    .select("*, production_lines(name), pdf_pages(page_number, image_url), projects(name, code), wall_notes(markup_data)")
     .eq("production_line_id", activeLineId)
     .neq("status", "complete")
     .order("sort_order");
 
   let completedWallQuery = supabase
     .from("wall_panels")
-    .select("*, production_lines(name), pdf_pages(page_number, image_url), projects(name, code)")
+    .select("*, production_lines(name), pdf_pages(page_number, image_url), projects(name, code), wall_notes(markup_data)")
     .eq("production_line_id", activeLineId)
     .eq("status", "complete")
     .order("updated_at", { ascending: false })

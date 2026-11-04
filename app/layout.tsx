@@ -3,18 +3,30 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "The Mill Wall Tracker",
-  description: "Tablet-first wall production tracking for The Mill Wood Systems",
-  manifest: "/manifest.json"
+  description:
+    "Tablet-first wall production tracking for The Mill Wood Systems",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+    ],
+    apple: [{ url: "/icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: "#050505",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1
+  maximumScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>{children}</body>

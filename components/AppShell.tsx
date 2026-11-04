@@ -11,7 +11,7 @@ export function AppShell({ profile, children }: { profile: Profile | null; child
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
           <Link href="/manpower" className="flex items-center gap-3" aria-label="The Mill Wood Systems tracker">
-            <img src="/brand/mill-mark.svg" alt="" className="brand-mark" />
+            <img src="/brand/mill-mark.svg" alt="" className="brand-mark rounded-full bg-[#ffffff] p-1" />
             <span className="grid leading-none">
               <span className="text-xl font-black tracking-[0.18em] text-ink">THE MILL</span>
               <span className="text-xs font-black tracking-[0.32em] text-steel">WOOD SYSTEMS</span>

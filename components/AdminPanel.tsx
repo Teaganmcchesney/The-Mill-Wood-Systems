@@ -1,5 +1,6 @@
 "use client";
 
+import { loadPdfJs } from "@/lib/pdf-browser";
 import { useMemo, useState } from "react";
 import { FileUp, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -8,7 +9,7 @@ import type { PdfPage, ProductionLine, Project, WallPanel } from "@/lib/types";
 
 type WallType = "Interior" | "Blocked Interior" | "Sheathed" | "Blocked Sheathed";
 
-const LEVELS = ["L1", "L2", "L3", "L4", "Roof"];
+const LEVELS = ["L1", "L2", "L3", "L4", "L5", "L6", "Roof"];
 
 type ParsedWall = {
   wallId: string;
@@ -237,8 +238,7 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
     setError("");
 
     try {
-      const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+      const pdfjs = await loadPdfJs();
       const supabase = createClient();
       const bytes = await file.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: bytes }).promise;

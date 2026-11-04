@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, Save } from "lucide-react";
 import { ZoomableDrawing } from "@/components/ZoomableDrawing";
 import { createClient } from "@/lib/supabase-browser";
@@ -40,6 +40,7 @@ const YARD_STATUSES = ["Ready", "Bundled", "Staged", "Loaded", "Shipped"];
 export function YardBoard({ walls }: { walls: YardWall[] }) {
   const [rows, setRows] = useState(walls);
   const [drafts, setDrafts] = useState<Record<string, YardDraft>>(() => Object.fromEntries(walls.map((wall) => [wall.id, draftFromWall(wall)])));
+  useEffect(() => { setRows(walls); setDrafts(current => Object.fromEntries(walls.map(wall => [wall.id, current[wall.id] ?? draftFromWall(wall)]))); }, [walls]);
   const [savingId, setSavingId] = useState("");
   const [error, setError] = useState("");
   const [openDrawingId, setOpenDrawingId] = useState(walls[0]?.id ?? "");

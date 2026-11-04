@@ -1,6 +1,9 @@
 "use client";
 
+import { missingBundleSetup } from "@/lib/bundle-setup";
+import { JointPackageUploader } from "@/components/JointPackageUploader";
 import { loadPdfJs } from "@/lib/pdf-browser";
+import { imperialFeet } from "@/lib/package-parser";
 import { useMemo, useState } from "react";
 import { FileUp, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -175,13 +178,15 @@ export function AdminPanel({
             </select>
           </label>
         </div>
+        <JointPackageUploader key={selectedProjectId + "|" + level} projectId={selectedProjectId} level={level} lines={lines} onDone={() => router.refresh()} />
+        <p className="font-bold">Production-only import (without Yard bundle drawings)</p>
         <PdfUploader projectId={selectedProjectId} level={level} lines={lines} onDone={() => router.refresh()} />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
           {projectDrawingPages.map((page) => (
             <div key={page.id} className="overflow-hidden rounded-md border border-slate-200 bg-slate-50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={page.image_url} alt={`Page ${page.page_number}`} className="aspect-[8.5/11] w-full object-cover" />
-              <p className="p-2 text-center font-black text-ink">Page {page.page_number}</p>
+              <p className="p-2 text-center font-black text-ink">{page.level ?? "Legacy"} / Page {page.page_number}</p>
             </div>
           ))}
         </div>
@@ -239,7 +244,16 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
 
     try {
       const pdfjs = await loadPdfJs();
+
       const supabase = createClient();
+      const readiness = await supabase.rpc("bundle_import_ready");
+      if(readiness.error && !missingBundleSetup(readiness.error)) throw readiness.error;
+      const bundleSetupReady = readiness.data === true;
+      if(bundleSetupReady) {
+        const {data: existingBundles,error:bundleCheckError}=await supabase.from("bundles").select("id").eq("project_id",projectId).eq("level",level).limit(1);
+        if(bundleCheckError) throw bundleCheckError;
+        if(existingBundles?.length) throw new Error("This level has a joint bundle package. Review drawing revisions with a supervisor before replacing it.");
+      }
       const bytes = await file.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: bytes }).promise;
       const timestamp = Date.now();
@@ -299,8 +313,8 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
         const { data: savedPage, error: pageError } = await supabase
           .from("pdf_pages")
           .upsert(
-            { project_id: projectId, page_number: pageNumber, image_url: data.publicUrl },
-            { onConflict: "project_id,page_number" }
+            { project_id: projectId, ...(bundleSetupReady ? {level} : {}), page_number: pageNumber, image_url: data.publicUrl },
+            { onConflict: bundleSetupReady ? "project_id,level,page_number" : "project_id,page_number" }
           )
           .select("id")
           .single();
@@ -321,12 +335,9 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
         };
 
         setBusy(`Creating wall card ${pageNumber} of ${pdf.numPages}...`);
-        const { data: existingWall, error: existingError } = await supabase
-          .from("wall_panels")
-          .select("id")
-          .eq("project_id", projectId)
-          .eq("wall_id", pageInfo.parsed.wallId)
-          .maybeSingle();
+        let existingQuery = supabase.from("wall_panels").select("id").eq("project_id",projectId).eq("wall_id",pageInfo.parsed.wallId);
+        if(bundleSetupReady) existingQuery=existingQuery.eq("level",level);
+        const {data:existingWall,error:existingError}=await existingQuery.maybeSingle();
         if (existingError) throw existingError;
 
         if (existingWall) {
@@ -459,28 +470,7 @@ function findLengthFeet(text: string) {
   return match?.[1] ? parseImperialLength(match[1]) : null;
 }
 
-function parseImperialLength(value: string) {
-  const normalized = value.replace(/[”“]/g, '"').replace(/[‘’]/g, "'").trim();
-  let feet = 0;
-  let inchText = normalized;
-  const feetMatch = normalized.match(/(\d+(?:\.\d+)?)\s*'/);
-
-  if (feetMatch) {
-    feet = Number(feetMatch[1]);
-    inchText = normalized.slice(feetMatch.index! + feetMatch[0].length).trim();
-  }
-
-  const inchMatch = inchText.match(/(\d+(?:\.\d+)?)(?:\s*-\s*(\d+)\/(\d+))?/);
-  let inches = 0;
-  if (inchMatch) {
-    inches = Number(inchMatch[1]);
-    if (inchMatch[2] && inchMatch[3]) inches += Number(inchMatch[2]) / Number(inchMatch[3]);
-  }
-
-  if (!feetMatch && !inchMatch) return null;
-  if (!Number.isFinite(feet) || !Number.isFinite(inches)) return null;
-  return Math.round((feet + inches / 12) * 100) / 100;
-}
+function parseImperialLength(value: string) { return imperialFeet(value); }
 
 function hasExteriorSheathing(text: string) {
   const lower = text.toLowerCase();

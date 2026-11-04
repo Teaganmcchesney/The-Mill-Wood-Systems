@@ -32,6 +32,7 @@ export type Project = {
 };
 
 export type PdfPage = {
+  level?: string;
   id: string;
   project_id: string;
   page_number: number;

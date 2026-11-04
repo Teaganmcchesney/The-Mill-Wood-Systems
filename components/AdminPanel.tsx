@@ -1,5 +1,6 @@
 "use client";
 
+import { missingBundleSetup } from "@/lib/bundle-setup";
 import { JointPackageUploader } from "@/components/JointPackageUploader";
 import { loadPdfJs } from "@/lib/pdf-browser";
 import { imperialFeet } from "@/lib/package-parser";
@@ -245,9 +246,14 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
       const pdfjs = await loadPdfJs();
 
       const supabase = createClient();
-      const { data: existingBundles, error: bundleCheckError } = await supabase.from("bundles").select("id").eq("project_id",projectId).eq("level",level).limit(1);
-      if(bundleCheckError) throw bundleCheckError;
-      if(existingBundles?.length) throw new Error("This level has a joint bundle package. Review drawing revisions with a supervisor before replacing it.");
+      const readiness = await supabase.rpc("bundle_import_ready");
+      if(readiness.error && !missingBundleSetup(readiness.error)) throw readiness.error;
+      const bundleSetupReady = readiness.data === true;
+      if(bundleSetupReady) {
+        const {data: existingBundles,error:bundleCheckError}=await supabase.from("bundles").select("id").eq("project_id",projectId).eq("level",level).limit(1);
+        if(bundleCheckError) throw bundleCheckError;
+        if(existingBundles?.length) throw new Error("This level has a joint bundle package. Review drawing revisions with a supervisor before replacing it.");
+      }
       const bytes = await file.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: bytes }).promise;
       const timestamp = Date.now();
@@ -307,8 +313,8 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
         const { data: savedPage, error: pageError } = await supabase
           .from("pdf_pages")
           .upsert(
-            { project_id: projectId, level, page_number: pageNumber, image_url: data.publicUrl },
-            { onConflict: "project_id,level,page_number" }
+            { project_id: projectId, ...(bundleSetupReady ? {level} : {}), page_number: pageNumber, image_url: data.publicUrl },
+            { onConflict: bundleSetupReady ? "project_id,level,page_number" : "project_id,page_number" }
           )
           .select("id")
           .single();
@@ -329,13 +335,9 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
         };
 
         setBusy(`Creating wall card ${pageNumber} of ${pdf.numPages}...`);
-        const { data: existingWall, error: existingError } = await supabase
-          .from("wall_panels")
-          .select("id")
-          .eq("project_id", projectId)
-          .eq("wall_id", pageInfo.parsed.wallId)
-          .eq("level", level)
-          .maybeSingle();
+        let existingQuery = supabase.from("wall_panels").select("id").eq("project_id",projectId).eq("wall_id",pageInfo.parsed.wallId);
+        if(bundleSetupReady) existingQuery=existingQuery.eq("level",level);
+        const {data:existingWall,error:existingError}=await existingQuery.maybeSingle();
         if (existingError) throw existingError;
 
         if (existingWall) {

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
+import { missingBundleSetup, bundleSetupMessage } from "@/lib/bundle-setup";
 import { loadPdfJs } from "@/lib/pdf-browser";
 import {
   parseProduction,
@@ -56,16 +57,23 @@ export function JointPackageUploader({
 }) {
   const [production, setProduction] = useState<File | null>(null),
     [bundles, setBundles] = useState<File | null>(null);
-  const [review, setReview] = useState(""),
-    [approved, setApproved] = useState(false);
   const [busy, setBusy] = useState(""),
     [message, setMessage] = useState("");
   async function upload() {
     if (!production || !bundles || !projectId || !lines.length) return;
-    setBusy("Reading and reconciling both PDFs…");
+    setBusy("Checking upload setup…");
     setMessage("");
     let p: PDFDocumentProxy | undefined, b: PDFDocumentProxy | undefined;
     try {
+      const supabase = createClient();
+      const readiness = await supabase.rpc("bundle_import_ready");
+      if (readiness.error) {
+        if (missingBundleSetup(readiness.error))
+          throw Error(bundleSetupMessage);
+        throw readiness.error;
+      }
+      if (!readiness.data) throw Error(bundleSetupMessage);
+      setBusy("Reading production walls and bundle membership…");
       const pdfjs = await loadPdfJs();
       p = await pdfjs.getDocument({ data: await production.arrayBuffer() })
         .promise;
@@ -76,23 +84,6 @@ export function JointPackageUploader({
       validatePackageLevels(productionTexts, bundleTexts, level);
       const panels = parseProduction(productionTexts);
       const report = parseBundles(bundleTexts, panels);
-      const differences = report.filter(
-        (r) => Math.abs(r.difference) > 0.000001,
-      );
-      if (differences.length && !approved) {
-        setReview(
-          differences
-            .map(
-              (r) =>
-                r.id +
-                ": production minus report " +
-                (r.difference * 12).toFixed(4) +
-                " inches",
-            )
-            .join("; "),
-        );
-        return;
-      }
       const wallRows = panels.map((panel) => {
         const wallType = panel.sheathed
           ? panel.blocked
@@ -109,15 +100,17 @@ export function JointPackageUploader({
         if (!line) throw Error("No " + name + " production line configured.");
         return { ...panel, wallType, line: line.id };
       });
-      const supabase = createClient(),
-        root = projectId + "/" + level + "/" + crypto.randomUUID();
+      const root = projectId + "/" + level + "/" + crypto.randomUUID();
       const { data: existing, error: existingError } = await supabase
         .from("bundles")
         .select("id")
         .eq("project_id", projectId)
         .eq("level", level)
         .limit(1);
-      if (existingError) throw existingError;
+      if (existingError)
+        throw missingBundleSetup(existingError)
+          ? Error(bundleSetupMessage)
+          : existingError;
       if (existing?.length)
         throw Error(
           "This level already has a bundle package. Review drawing revisions with a supervisor.",
@@ -159,7 +152,6 @@ export function JointPackageUploader({
           productionPdfUrl,
           bundlePdfUrl,
           id: item.id,
-          feet: item.feet,
           count: item.count,
           image: await save(
             "drawing-pages",
@@ -168,14 +160,13 @@ export function JointPackageUploader({
           ),
         });
       }
-      setBusy("Saving reconciled package…");
+      setBusy("Saving matched walls and bundles…");
       const { error } = await supabase.rpc("import_joint_package", {
         p_project: projectId,
         p_level: level,
         p_pages: pages,
         p_walls: wallRows,
         p_bundles: bundleRows,
-        p_accept_differences: approved,
       });
       if (error) throw error;
       setMessage(
@@ -204,8 +195,9 @@ export function JointPackageUploader({
     <div className="grid gap-3 text-ink rounded-md border-2 border-orange-400 p-4">
       <h3 className="text-xl font-black">Production + bundle drawings</h3>
       <p>
-        Both PDFs must reconcile by wall count and lineal footage. Keep this tab
-        open during conversion.
+        Production drawings supply wall lengths. The bundle report links walls
+        to bundles for completion tracking. Keep this tab open during
+        conversion.
       </p>
       <label className="grid gap-2 font-bold">
         Production drawings
@@ -215,8 +207,6 @@ export function JointPackageUploader({
           accept="application/pdf"
           onChange={(e) => {
             setProduction(e.target.files?.[0] ?? null);
-            setReview("");
-            setApproved(false);
           }}
         />
       </label>
@@ -228,29 +218,9 @@ export function JointPackageUploader({
           accept="application/pdf"
           onChange={(e) => {
             setBundles(e.target.files?.[0] ?? null);
-            setReview("");
-            setApproved(false);
           }}
         />
       </label>
-      {review && (
-        <div role="alert" className="rounded border border-orange-500 p-3">
-          <p>
-            Source length differences require supervisor review. Wall LF uses
-            the production dimensions without rounding each wall. Bundle report
-            totals remain visible separately.
-          </p>
-          <p className="my-2 text-sm">{review}</p>
-          <label className="flex gap-3 font-bold">
-            <input
-              type="checkbox"
-              checked={approved}
-              onChange={(e) => setApproved(e.target.checked)}
-            />
-            I have checked and accept these source differences.
-          </label>
-        </div>
-      )}
       <button
         className="touch-target rounded-md bg-ink p-4 font-black text-white disabled:opacity-50"
         disabled={

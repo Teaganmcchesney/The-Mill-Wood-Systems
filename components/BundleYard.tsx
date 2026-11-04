@@ -13,7 +13,6 @@ export type BundleDrawing = {
   image_url: string;
   production_pdf_url: string;
   bundle_pdf_url: string;
-  report_feet: number;
   expected_count: number;
   stacked_at: string | null;
   bundle_panels: {
@@ -170,9 +169,8 @@ function BundleCard({
           </h3>
           <p>
             {complete} / {b.expected_count} walls production complete ·{" "}
-            {productionFeet.toFixed(4)} production LF /{" "}
-            {Number(b.report_feet).toFixed(4)} report LF · {verified} outlines
-            verified
+            {productionFeet.toFixed(4)} LF from production drawings · {verified}{" "}
+            outlines verified
           </p>
         </div>
         <strong className="rounded-md bg-orange-100 text-black p-3">

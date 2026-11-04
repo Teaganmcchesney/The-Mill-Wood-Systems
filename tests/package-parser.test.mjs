@@ -44,28 +44,36 @@ test("continuation pages attach once without inflating LF", () => {
     /Duplicate/,
   );
 });
-test("bundle ID/count and length checks", () => {
+test("bundle reports supply membership only; report footage is ignored", () => {
   const walls = parseProduction([panel("D78"), panel("D79")]);
-  assert.equal(
-    parseBundles(
-      ["B01-611-X1 Total: 2' 0\" Sheathed (0): Unsheathed (2):"],
-      walls,
-    ).length,
-    1,
+  for (const report of [
+    "B01-611-X1 Unsheathed (2):",
+    "B01-611-X1 Total: 99999' 11-15/16\" Unsheathed (2):",
+    "B01-611-X1 Total: not a dimension Unsheathed (2):",
+  ]) {
+    const result = parseBundles([report], walls);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].count, 2);
+    assert.deepEqual(
+      result[0].members.map((p) => p.wallId),
+      ["D78", "D79"],
+    );
+    assert.equal("feet" in result[0], false);
+    assert.equal(
+      walls.reduce((s, p) => s + p.feet, 0),
+      2,
+    );
+  }
+  assert.throws(
+    () => parseBundles(["B02-611-X1 Unsheathed (2):"], walls),
+    /membership/,
   );
   assert.throws(
-    () => parseBundles(["B01-611-X1 Total: 3' 0\" Unsheathed (2):"], walls),
-    /Resolve/,
-  );
-  assert.throws(
-    () => parseBundles(["B02-611-X1 Total: 2' 0\" Unsheathed (2):"], walls),
-    /Resolve/,
-  );
-  assert.throws(
-    () => parseBundles(["B01-611-X1 Total: 2' 0\" Unsheathed (3):"], walls),
-    /Resolve/,
+    () => parseBundles(["B01-611-X1 Unsheathed (3):"], walls),
+    /membership/,
   );
 });
+
 test("outline requires bounded nonzero geometry", () => {
   assert.equal(
     validOutline([

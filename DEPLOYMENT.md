@@ -17,7 +17,7 @@ project and Vercel application.
    release: migration 006 replaces the old project/page conflict target with
    project/level/page. The old deployed uploader cannot import after that change.
    Existing shop completion and reads are unaffected.
-5. Apply only supabase/migrations/006_joint_bundle_packages.sql after the existing
+5. Apply supabase/migrations/006_joint_bundle_packages.sql after the existing
    migrations. Do not replay the initial schema on a live database. Existing
    completion fields and page IDs are preserved.
 6. Deploy the reviewed branch to the existing Vercel project, verify its build,
@@ -31,8 +31,8 @@ project and Vercel application.
   during rendering. Expect 361 unique walls, 39 bundles, and 2,430.442708 production
   LF before per-wall storage rounding.
 - First bundle B01-611-X1 contains D78, D79, X6, X5, X4, X3, X2 and X1.
-  Its printed total is 64 feet 2-9/16 inches; production dimensions sum to 1/16
-  inch less. Review every source discrepancy before accepting it.
+  Production dimensions alone determine wall LF. Changing or removing printed
+  bundle-report footage must not affect LF or require acceptance of differences.
 - Verify all eight first-bundle positions against the drawing. Detected bands may
   need redrawing; suggested positions are never automatically approved.
 - Complete one wall and confirm orange fill within 15 seconds. Undo completion:
@@ -56,9 +56,21 @@ level-scoped keys after imports. Plan database rollback against actual data.
 - Next.js 14.2.35 production build passed with placeholder build-only Supabase
   values. This does not validate live credentials or production connectivity.
 - PDF.js extraction from all 490 production pages and 39 bundle pages passed
-  parser reconciliation. Original drawings are not committed to the repository.
+  wall-membership checks. Original drawings are not committed to the repository.
 - Local PostgreSQL-compatible tests cover rollback, supervisor RPC permissions,
   RLS with authenticated table grants, completion preservation, level isolation
   and stacking gates.
 - Live migration, imports, Vercel promotion still need
   service access/approval and final signed-in checks.
+
+
+## Missing bundle table or schema-cache errors
+
+Confirm that Vercel points to the intended Supabase project. Run migration 006
+there after the existing migrations. It creates the bundle tables, membership
+records, readiness check and required RPCs; it also reloads PostgREST's schema.
+Re-running the setup is supported, including over the earlier draft schema.
+A cache reload alone cannot create absent tables. The app checks readiness
+before processing a PDF, while production-only uploads can still use the
+earlier schema. Never report a successful bundle import before its transaction
+has committed.

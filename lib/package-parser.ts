@@ -73,27 +73,26 @@ export function parseBundles(texts: string[], panels: Panel[]) {
   const result = texts.map((raw, i) => {
     const text = raw.replace(/\s+/g, " ");
     const id = bundleId(text);
-    const totalText = text.match(/Total:\s*(\d+\s*'[^"\n]*")/i)?.[1];
-    const feet = totalText ? imperialFeet(totalText) : null;
     const counts = Array.from(
       text.matchAll(/(?:Unsheathed|Sheathed)\s*\((\d+)\)/gi),
     );
     const count = counts.reduce((s, m) => s + +m[1], 0);
-    if (!id || feet === null || !counts.length || seen.has(id))
+    if (!id || !counts.length || seen.has(id))
       throw new Error(
-        `Check bundle report page ${i + 1}: ID, count or total is missing/duplicated.`,
+        `Check bundle report page ${i + 1}: bundle ID or panel count is missing/duplicated.`,
       );
     seen.add(id);
     const members = panels.filter((p) => p.bundleId === id);
-    const sum = members.reduce((s, p) => s + p.feet, 0);
-    if (
-      members.length !== count ||
-      Math.abs(sum - feet) > count / 192 + 0.000001
-    )
+    if (members.length !== count)
       throw new Error(
-        `${id}: report has ${count} walls / ${feet.toFixed(4)} LF; production has ${members.length} / ${sum.toFixed(4)} LF. Resolve before importing.`,
+        id +
+          ": bundle report has " +
+          count +
+          " walls; production identifies " +
+          members.length +
+          ". Check bundle membership before importing.",
       );
-    return { id, page: i + 1, feet, count, members, difference: sum - feet };
+    return { id, page: i + 1, count, members };
   });
   if (panels.some((p) => !seen.has(p.bundleId)))
     throw new Error(

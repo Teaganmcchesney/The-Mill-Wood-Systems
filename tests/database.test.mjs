@@ -39,6 +39,36 @@ test("joint package migration, rollback, level isolation, permissions and stacki
       ),
     );
     await db.query("select set_config('app.user',$1,false)", [manager]);
+    // Re-run over the previous schema: an obsolete non-null report field and six-argument RPC
+    // must not force bundle-report LF back into imports.
+    await db.exec(
+      "alter table bundles add column report_feet numeric not null",
+    );
+    await db.exec(
+      "create function import_joint_package(uuid,text,jsonb,jsonb,jsonb,boolean default false) returns void language plpgsql as $$ begin return; end $$",
+    );
+    const migration = readFileSync(
+      new URL(
+        "../supabase/migrations/006_joint_bundle_packages.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    await db.exec(migration);
+    await db.exec(migration);
+    assert.equal(
+      (await db.query("select bundle_import_ready() ready")).rows[0].ready,
+      true,
+    );
+    assert.equal(
+      (
+        await db.query(
+          "select to_regprocedure('import_joint_package(uuid,text,jsonb,jsonb,jsonb,boolean)') old",
+        )
+      ).rows[0].old,
+      null,
+    );
+
     const walls = [
       {
         wallId: "D78",
@@ -64,7 +94,7 @@ test("joint package migration, rollback, level isolation, permissions and stacki
     const bundles = [
       {
         id: "B01-611-X1",
-        feet: 2 + 1 / 192,
+        feet: "not a wall length",
         count: 2,
         image: "https://example.test/b.jpg",
         productionPdfUrl: "https://example.test/p.pdf",
@@ -76,21 +106,18 @@ test("joint package migration, rollback, level isolation, permissions and stacki
       "insert into wall_panels(project_id,wall_id,wall_type,level,lineal_feet,production_line_id,status) values($1,'D78','Interior','L6',1,$2,'complete')",
       [project, line],
     );
-    const importPackage = (
-      level = "L6",
-      approved = true,
-      rows = walls,
-      bs = bundles,
-    ) =>
-      db.query("select import_joint_package($1,$2,$3,$4,$5,$6)", [
+    const importPackage = (level = "L6", rows = walls, bs = bundles) =>
+      db.query("select import_joint_package($1,$2,$3,$4,$5)", [
         project,
         level,
         JSON.stringify(pages),
         JSON.stringify(rows),
         JSON.stringify(bs),
-        approved,
       ]);
-    await assert.rejects(importPackage("L6", false), /supervisor acceptance/);
+    await assert.rejects(
+      importPackage("L6", walls, [{ ...bundles[0], count: 3 }]),
+      /membership count/,
+    );
     assert.equal(
       (await db.query("select count(*)::int n from pdf_pages")).rows[0].n,
       0,
@@ -104,6 +131,17 @@ test("joint package migration, rollback, level isolation, permissions and stacki
       (await db.query("select status from wall_panels where wall_id='D78'"))
         .rows[0].status,
       "complete",
+    );
+    assert.equal(
+      Number(
+        (await db.query("select sum(lineal_feet) total from wall_panels"))
+          .rows[0].total,
+      ),
+      2,
+    );
+    assert.equal(
+      (await db.query("select report_feet from bundles")).rows[0].report_feet,
+      null,
     );
     const bundle = (await db.query("select id from bundles")).rows[0].id;
     const panel = (await db.query("select id from bundle_panels limit 1"))
@@ -202,8 +240,8 @@ test("joint package migration, rollback, level isolation, permissions and stacki
       4,
     );
     await assert.rejects(
-      importPackage("L4", true, walls, [{ ...bundles[0], feet: 5 }]),
-      /reconciliation/,
+      importPackage("L4", walls, [{ ...bundles[0], count: 3 }]),
+      /membership count/,
     );
     assert.equal(
       (await db.query("select count(*)::int n from pdf_pages where level='L4'"))
@@ -235,7 +273,7 @@ test("joint package migration, rollback, level isolation, permissions and stacki
         JSON.parse(readFileSync(dir + "/bundles.json")),
         fullWalls,
       );
-      await db.query("select import_joint_package($1,$2,$3,$4,$5,true)", [
+      await db.query("select import_joint_package($1,$2,$3,$4,$5)", [
         project,
         "CHINOOK",
         JSON.stringify(

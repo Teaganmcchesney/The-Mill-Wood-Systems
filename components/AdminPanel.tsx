@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { missingBundleSetup } from "@/lib/bundle-setup";
 import { JointPackageUploader } from "@/components/JointPackageUploader";
 import { loadPdfJs } from "@/lib/pdf-browser";
@@ -114,6 +115,7 @@ export function AdminPanel({
         <h1 className="text-4xl font-black text-ink">Projects, drawing packages, and imported walls</h1>
       </div>
 
+      <Link href="/yard/setup" className="touch-target rounded-md border border-orange-500 p-4 text-xl font-black text-ink">Edit stacking layouts &amp; Yard records</Link>
       <section className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-2xl font-black text-ink">Projects</h2>

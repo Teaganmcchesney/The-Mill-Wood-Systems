@@ -112,7 +112,7 @@ Existing production-only imports remain available. Project/level/page and
 project/level/wall identities prevent another level from replacing earlier pages
 or cards. Already imported joint packages cannot be overwritten through either
 uploader; drawing-revision replacement is a separate future task.
-The authentic user-supplied MillCo_Circle_Dark.svg now supplies the app icon, favicon, home-screen icons, header and sign-in logo. Original SVG paths are unchanged; raster icons use a white background.
+The authentic user-supplied MillCo_Circle_Dark.svg now supplies the app icon, favicon, home-screen icons, header and sign-in logo. Original SVG paths are unchanged; raster icons keep the logo’s white interior with transparency outside its circular edge.
 
 Run pnpm test, pnpm typecheck, and pnpm build. Build scripts copy the installed
 PDF.js library and matching worker into public/pdfjs. See DEPLOYMENT.md.

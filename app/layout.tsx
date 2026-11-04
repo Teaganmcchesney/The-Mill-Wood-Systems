@@ -8,10 +8,10 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/favicon.ico" },
-      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon.ico?v=circle-2" },
+      { url: "/favicon-32.png?v=circle-2", type: "image/png", sizes: "32x32" },
     ],
-    apple: [{ url: "/icon-180.png", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: "/icon-180.png?v=circle-2", sizes: "180x180", type: "image/png" }],
   },
 };
 

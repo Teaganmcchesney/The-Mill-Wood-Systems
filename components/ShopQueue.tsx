@@ -71,6 +71,7 @@ export function ShopQueue({
       <div className="grid gap-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
+            <Link target="_blank" rel="noreferrer" href={"/yard?line="+encodeURIComponent(activeLineId)+"&project="+encodeURIComponent(activeProjectId)} className="touch-target inline-flex items-center text-lg font-bold text-steel underline">Open stacking display</Link>
             <p className="text-lg font-bold text-steel">Production queue</p>
             <h1 className="text-4xl font-black text-ink">Current wall drawing</h1>
           </div>

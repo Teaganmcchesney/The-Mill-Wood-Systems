@@ -137,3 +137,12 @@ option {
   width: 56px;
   object-fit: contain;
 }
+
+.yard-screen:fullscreen {
+ background: #050505;
+ width: 100vw;
+ height: 100vh;
+ padding: 24px;
+ overflow: auto;
+}
+.yard-outline-dialog::backdrop { background: rgba(0,0,0,.88); }

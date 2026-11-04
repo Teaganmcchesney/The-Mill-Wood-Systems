@@ -36,7 +36,8 @@ export default async function ShopPage({
     .select("*, production_lines(name), pdf_pages(page_number, image_url), projects(name, code), wall_notes(note_text, markup_data)")
     .eq("production_line_id", activeLineId)
     .neq("status", "complete")
-    .order("sort_order");
+    .order("sort_order")
+    .order("id");
 
   let completedWallQuery = supabase
     .from("wall_panels")

@@ -102,11 +102,10 @@ bundle IDs, panel counts and drawings for membership/completion tracking only.
 Their printed footage is never parsed, compared, displayed or used to approve an
 import. There is no footage-differences prompt.
 
-Yard shows every imported bundle member, including unfinished walls. Orange fill
-means production complete. Suggested colored bands are unverified geometry:
-a supervisor must match each wall label to its exact position and approve the
-outline. Supervisors can draw the perimeter manually. Physical stacking is a
-separate audited action, enabled only when every expected wall is complete.
+Yard automatically traces the current bundle with orange wall outlines and fills
+completed walls orange. No outline approval is required. Optional manual shape
+adjustments are available in Yard setup. Physical stacking is a separate audited
+action, enabled only when every expected wall is complete.
 Undoing completion leaves any physical stack record visible with a review message.
 
 Existing production-only imports remain available. Project/level/page and
@@ -124,3 +123,9 @@ Apply migration 006 to the app's existing Supabase project to enable bundle
 tracking. The setup is repeatable, preserves existing completions, and notifies
 PostgREST to reload its schema. Production-only imports retain the earlier
 schema path until bundle setup is complete.
+
+### Yard stacking display
+
+Yard follows the selected production line and job, displaying only the bundle containing the current wall. It automatically traces wall bodies from the Complete Bundle Report and labels them using original production-drawing order. Outline counts and relative widths must match production dimensions; bundle-report footage never enters LF calculations. No outline approval is required. Unsupported layouts show a retry/edit message instead of guessed positions.
+
+Walls fill orange on production completion. Completed bundle names appear at the bottom in bundle-number order and open their outline when selected. Full screen is intended for the second monitor at the end of the line; it refreshes every five seconds. PDFs are not displayed on this screen. Optional shape adjustments and existing physical Yard records are available under `/yard/setup`. Production completion and physical stacking remain separate.

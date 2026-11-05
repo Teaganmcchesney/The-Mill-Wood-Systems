@@ -21,8 +21,17 @@ export function imperialFeet(value: string): number | null {
       12
   );
 }
+// Optional cross-section dimension for tracing panels rotated in a bundle drawing.
+// It never contributes to production LF.
+export function productionHeightFeet(text: string): number | null {
+  const height = text.match(/\bHeight:\s*([0-9\s/\x27\x22.\-‘’“”]+)/i)?.[1];
+  return height ? imperialFeet(height) : null;
+}
 export function bundleId(text: string) {
-  return text.match(/\bB\d+-\d+-[A-Z0-9]+\b/i)?.[0].toUpperCase() ?? null;
+  return (
+    text.match(/\bB\d+-L?\d+-[A-Z0-9]+\b(?![A-Z0-9_.-])/i)?.[0].toUpperCase() ??
+    null
+  );
 }
 export function parseProduction(texts: string[]): Panel[] {
   const panels: Panel[] = [];
@@ -36,8 +45,14 @@ export function parseProduction(texts: string[]): Panel[] {
     if (m) {
       const feet = imperialFeet(m[2]);
       const wallId = m[1].toUpperCase();
-      if (!bid || feet === null || feet <= 0)
-        throw new Error(`Check bundle and length on production page ${i + 1}.`);
+      if (!bid)
+        throw new Error(
+          `Cannot read the bundle ID for wall ${wallId} on production page ${i + 1}.`,
+        );
+      if (feet === null || feet <= 0)
+        throw new Error(
+          `Cannot read a positive Length for wall ${wallId} on production page ${i + 1}.`,
+        );
       if (seen.has(wallId))
         throw new Error(`Duplicate wall ${wallId}; resolve before importing.`);
       seen.add(wallId);

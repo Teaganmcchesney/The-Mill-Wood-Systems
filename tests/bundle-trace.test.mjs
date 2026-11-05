@@ -80,3 +80,25 @@ test("rejects thin sheathing strips and mismatched production identities", () =>
   );
   assert.equal(traceMatchesProduction([rect(0.4)], [20, 10], 1000), false);
 });
+
+test("rotated panels require a matching production height, with one shared drawing scale", () => {
+  const rect = (w) => [
+    { x: 0, y: 0.5 },
+    { x: w, y: 0.5 },
+    { x: w, y: 0.52 },
+    { x: 0, y: 0.52 },
+  ];
+  const outlines = [rect(0.4), rect(0.04)],
+    feet = [10, 4];
+  assert.equal(traceMatchesProduction(outlines, feet, 1000), false);
+  assert.equal(traceMatchesProduction(outlines, feet, 1000, [9, 1]), true);
+  assert.equal(traceMatchesProduction(outlines, feet, 1000, [9, 0.5]), false);
+  assert.deepEqual(feet, [10, 4]);
+});
+test("deep wall sections are traced without admitting paper or thin sheathing", () => {
+  const list = drawing();
+  list.argsArray[2][1] = [70, 100, 520, 100, 520, 130, 70, 130];
+  assert.equal(extractWallRectangles(list, ops, viewport).length, 1);
+  list.argsArray[2][1] = [70, 100, 520, 100, 520, 200, 70, 200];
+  assert.equal(extractWallRectangles(list, ops, viewport).length, 0);
+});

@@ -29,7 +29,7 @@ export function extractWallRectangles(
     pending: Point[][] = [];
   const stack: { matrix: Matrix; color: number[] }[] = [],
     result: Point[][] = [];
-  // Chinook reports encode wall bodies as brown filled rectangles; unsupported styles fail closed.
+  // TrueBuild bundle reports encode wall bodies as brown filled rectangles.
   const wood = () =>
     color.length === 3 &&
     Math.abs(color[0] - 205) < 3 &&
@@ -123,7 +123,7 @@ export function extractWallRectangles(
           top > 0.35 &&
           (right - left) * viewport.width > 2 &&
           (bottom - top) * viewport.height > 3 &&
-          (bottom - top) * viewport.height < 25
+          (bottom - top) * viewport.height < 60
         ) {
           pending.push([
             { x: left, y: top },
@@ -160,6 +160,7 @@ export function traceMatchesProduction(
   outlines: Point[][],
   feet: number[],
   pageWidth: number,
+  rotatedFeet?: number[],
 ) {
   if (
     !outlines.length ||
@@ -170,9 +171,39 @@ export function traceMatchesProduction(
   const widths = outlines.map(
     (ps) => Math.max(...ps.map((p) => p.x)) - Math.min(...ps.map((p) => p.x)),
   );
-  const factors = widths.map((w, i) => w / feet[i]).sort((a, b) => a - b),
-    scale = factors[Math.floor(factors.length / 2)];
-  return widths.every(
-    (w, i) => Math.abs(w - feet[i] * scale) * pageWidth <= 0.75,
+  if (widths.some((w) => !Number.isFinite(w) || w <= 0)) return false;
+  const options = feet.map((length, i) => {
+    const height = rotatedFeet?.[i];
+    return height && Number.isFinite(height) && height > 0
+      ? [length, height]
+      : [length];
+  });
+  // A single drawing scale must explain every wall. Rotated panels may use their
+  // production height as horizontal span; report footage is never consulted.
+  const candidates = options.flatMap((values, i) =>
+    values.map((value) => widths[i] / value),
   );
+  for (const candidate of candidates) {
+    const factors = options
+      .map((values, i) => {
+        const dimension = values.reduce((a, b) =>
+          Math.abs(widths[i] - a * candidate) <=
+          Math.abs(widths[i] - b * candidate)
+            ? a
+            : b,
+        );
+        return widths[i] / dimension;
+      })
+      .sort((a, b) => a - b);
+    const scale = factors[Math.floor(factors.length / 2)];
+    if (
+      widths.every((w, i) =>
+        options[i].some(
+          (value) => Math.abs(w - value * scale) * pageWidth <= 0.75,
+        ),
+      )
+    )
+      return true;
+  }
+  return false;
 }

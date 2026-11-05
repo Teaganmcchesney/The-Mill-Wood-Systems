@@ -135,3 +135,9 @@ Walls fill orange on production completion. Completed bundle names appear at the
 Apply `20261105183838_bundle_production_order.sql` before deploying the bundle planner. Yard shows every upcoming bundle in the selected job, with drag, Make next and up/down scheduling controls for supervisors/admins. Priority is shared across both production lines; line assignments remain unchanged. Shop and Yard refresh every five seconds.
 
 Shop groups walls by persisted bundle priority and uses original drawing-page order within each bundle (bottom to top). Completing a wall removes it from the pending sequence; undo returns it to its original position within the same bundle. Moving a bundle changes no completion, LF, stacking, or wall-position records. Future imports append to the plan. Legacy walls without bundle membership retain their per-wall queue and Skip control. For bundled walls, supervisors can Defer bundle as a whole. Individual wall skipping cannot split the stack sequence. Completed bundle labels remain in bundle-number order.
+
+### Production package formats
+
+The joint importer accepts numeric bundle IDs (`B01-611-X1`) and level-coded IDs (`B01-L1-D1`). Wall LF comes only from each production header's Length field. Unreadable bundle IDs and wall lengths have separate page-specific error messages.
+
+Yard uses the same bundle-ID reader. For panels rotated in a stack drawing, tracing may also compare against the panel Height from the production PDF; height is used only to validate the drawing orientation and never changes LF. Deeper wall cross-sections are included. Complete-package regression checks can be run with `CHINOOK_REVIEW`, `ROHIT_REVIEW`, and `ROHIT_BUNDLE_PDF` pointing to local review data; customer PDFs remain outside the repository.

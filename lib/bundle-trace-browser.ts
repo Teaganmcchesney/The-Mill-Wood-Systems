@@ -5,11 +5,52 @@ import {
   extractWallRectangles,
   traceMatchesProduction,
 } from "@/lib/bundle-trace";
-import type { Point } from "@/lib/package-parser";
+import {
+  bundleId as readBundleId,
+  productionHeightFeet,
+  type Point,
+} from "@/lib/package-parser";
 type Package = { pdf: PDFDocumentProxy; pages: Map<string, number> };
 export type AutoTrace = { outlines: Point[][]; aspect: number };
 const packages = new Map<string, Promise<Package>>(),
   traces = new Map<string, Promise<AutoTrace>>();
+type ProductionSource = { url: string; wallIds: string[] };
+const heights = new Map<string, Promise<Map<string, number>>>();
+async function sourceHeights(url: string) {
+  if (!heights.has(url))
+    heights.set(
+      url,
+      (async () => {
+        const pdfjs = await loadPdfJs(),
+          pdf = await pdfjs.getDocument(url).promise,
+          result = new Map<string, number>();
+        try {
+          for (let n = 1; n <= pdf.numPages; n++) {
+            const page = await pdf.getPage(n),
+              content = await page.getTextContent();
+            const text = content.items
+              .map((i) => ("str" in i ? i.str : ""))
+              .join(" ");
+            const wall = text
+              .match(/Panel\s*#\s*([A-Z0-9_.-]+)\s+Length:/i)?.[1]
+              .toUpperCase();
+            const bundle = readBundleId(text),
+              height = productionHeightFeet(text);
+            if (wall && bundle && height && height > 0)
+              result.set(bundle + "|" + wall, height);
+            page.cleanup();
+          }
+          return result;
+        } finally {
+          await pdf.destroy();
+        }
+      })().catch((e) => {
+        heights.delete(url);
+        throw e;
+      }),
+    );
+  return heights.get(url)!;
+}
 async function sourcePackage(url: string) {
   if (!packages.has(url))
     packages.set(
@@ -24,7 +65,7 @@ async function sourcePackage(url: string) {
           const text = content.items
             .map((i) => ("str" in i ? i.str : ""))
             .join(" ");
-          const id = text.match(/\bB\d+-\d+-[A-Z0-9]+\b/i)?.[0].toUpperCase();
+          const id = readBundleId(text);
           if (id) pages.set(id, n);
           page.cleanup();
         }
@@ -40,8 +81,18 @@ export async function autoTraceBundle(
   url: string,
   bundleId: string,
   feet: number[],
+  production?: ProductionSource,
 ) {
-  const key = url + "|" + bundleId + "|" + feet.join(",");
+  const key =
+    url +
+    "|" +
+    bundleId +
+    "|" +
+    feet.join(",") +
+    "|" +
+    (production?.url ?? "") +
+    "|" +
+    (production?.wallIds.join(",") ?? "");
   if (!traces.has(key))
     traces.set(
       key,
@@ -58,7 +109,26 @@ export async function autoTraceBundle(
           viewport,
         );
         page.cleanup();
-        if (!traceMatchesProduction(outlines, feet, viewport.width))
+        let matched = traceMatchesProduction(outlines, feet, viewport.width);
+        if (
+          !matched &&
+          production?.url &&
+          production.wallIds.length === feet.length
+        ) {
+          const dimensions = await sourceHeights(production.url);
+          const alternatives = production.wallIds.map(
+            (id) =>
+              dimensions.get(bundleId.toUpperCase() + "|" + id.toUpperCase()) ??
+              0,
+          );
+          matched = traceMatchesProduction(
+            outlines,
+            feet,
+            viewport.width,
+            alternatives,
+          );
+        }
+        if (!matched)
           throw Error(
             "This stack layout could not be matched automatically. Adjust its wall shapes in Yard setup.",
           );

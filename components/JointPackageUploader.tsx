@@ -174,7 +174,7 @@ export function JointPackageUploader({
           panels.length +
           " walls and " +
           report.length +
-          " bundles. Supervisor outline verification is available in Yard.",
+          " bundles. Stacking outlines and production order are available in Yard.",
       );
       onDone();
     } catch (e) {

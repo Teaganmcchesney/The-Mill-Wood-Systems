@@ -25,6 +25,7 @@ export function BundleOutline({
     bundle.id +
     "|" +
     bundle.bundle_pdf_url +
+    bundle.production_pdf_url +
     "|" +
     ordered.map((p) => p.id + ":" + p.wall_panels?.lineal_feet).join(",");
   const [trace, setTrace] = useState<{ key: string; value: AutoTrace } | null>(
@@ -60,6 +61,10 @@ export function BundleOutline({
       bundle.bundle_pdf_url,
       bundle.bundle_id,
       ordered.map((p) => Number(p.wall_panels?.lineal_feet ?? 0)),
+      {
+        url: bundle.production_pdf_url,
+        wallIds: ordered.map((p) => p.wall_panels?.wall_id ?? ""),
+      },
     )
       .then((value) => {
         if (active) setTrace({ key: sourceKey, value });

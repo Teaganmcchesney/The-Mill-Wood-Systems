@@ -120,6 +120,10 @@ function BundleCard({
       b.bundle_pdf_url,
       b.bundle_id,
       ordered.map((p) => Number(p.wall_panels?.lineal_feet ?? 0)),
+      {
+        url: b.production_pdf_url,
+        wallIds: ordered.map((p) => p.wall_panels?.wall_id ?? ""),
+      },
     )
       .then((trace) => {
         if (current)

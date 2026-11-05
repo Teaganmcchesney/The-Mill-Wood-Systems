@@ -4,3 +4,4 @@ node_modules/
 !.env.example
 public/pdfjs/
 *.tsbuildinfo
+supabase/.temp/

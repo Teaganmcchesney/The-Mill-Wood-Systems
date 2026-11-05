@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BundleSchedule } from "@/components/BundleSchedule";
 import { BundleOutline } from "@/components/BundleOutline";
 import {
   activeBundle,
@@ -74,7 +75,7 @@ export function BundleYard({
   return (
     <section
       ref={screen}
-      className="yard-screen grid min-h-[calc(100vh-9rem)] grid-rows-[auto_1fr_auto] gap-4 text-ink"
+      className="yard-screen grid min-h-[calc(100vh-9rem)] grid-rows-[auto_1fr_auto_auto] gap-4 text-ink"
     >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -184,6 +185,11 @@ export function BundleYard({
           </div>
         )}
       </article>
+      <BundleSchedule
+        bundles={bundles}
+        currentId={current?.id}
+        manager={manager}
+      />
       <footer className="grid gap-2">
         <div className="flex flex-wrap justify-between gap-2">
           <h2 className="text-lg font-black">Production-complete bundles</h2>

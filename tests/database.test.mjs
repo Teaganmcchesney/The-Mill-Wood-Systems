@@ -315,6 +315,101 @@ test("joint package migration, rollback, level isolation, permissions and stacki
         39,
       );
     }
+    if (process.env.ROHIT_REVIEW) {
+      // Verify the new format through the real transactional importer and queue trigger,
+      // not just the text parser. Customer files remain outside the repository.
+      await db.exec(
+        readFileSync(
+          new URL(
+            "../supabase/migrations/20261105183838_bundle_production_order.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      const source = ts.transpileModule(
+        readFileSync(
+          new URL("../lib/package-parser.ts", import.meta.url),
+          "utf8",
+        ),
+        {
+          compilerOptions: {
+            module: ts.ModuleKind.ES2022,
+            target: ts.ScriptTarget.ES2022,
+          },
+        },
+      ).outputText;
+      const { parseProduction, parseBundles } = await import(
+        "data:text/javascript;base64," + Buffer.from(source).toString("base64")
+      );
+      const dir = process.env.ROHIT_REVIEW,
+        raw = JSON.parse(readFileSync(dir + "/production.json")),
+        panels = parseProduction(raw),
+        report = parseBundles(
+          JSON.parse(readFileSync(dir + "/bundles.json")),
+          panels,
+        );
+      await db.query("select import_joint_package($1,$2,$3,$4,$5)", [
+        project,
+        "L1",
+        JSON.stringify(
+          raw.map((_, i) => ({
+            page: i + 1,
+            image: "https://example.test/rohit-" + i + ".jpg",
+          })),
+        ),
+        JSON.stringify(
+          panels.map((p) => ({
+            ...p,
+            wallType: p.sheathed ? "Sheathed" : "Interior",
+            line,
+          })),
+        ),
+        JSON.stringify(
+          report.map((b) => ({
+            ...b,
+            image: "https://example.test/b.jpg",
+            productionPdfUrl: "https://example.test/p.pdf",
+            bundlePdfUrl: "https://example.test/b.pdf",
+          })),
+        ),
+      ]);
+      assert.equal(
+        (
+          await db.query(
+            "select count(*)::int n from wall_panels where level='L1'",
+          )
+        ).rows[0].n,
+        232,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select count(*)::int n from pdf_pages where level='L1'",
+          )
+        ).rows[0].n,
+        311,
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select count(*)::int n from bundles where level='L1' and production_order is not null",
+          )
+        ).rows[0].n,
+        18,
+      );
+      assert.ok(
+        Math.abs(
+          Number(
+            (
+              await db.query(
+                "select sum(lineal_feet) feet from wall_panels where level='L1'",
+              )
+            ).rows[0].feet,
+          ) - 1550.2604166666667,
+        ) < 0.0002,
+      );
+    }
   } finally {
     await db.close();
   }

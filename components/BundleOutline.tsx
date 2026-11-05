@@ -13,9 +13,11 @@ const aspects = new Map<string, number>();
 export function BundleOutline({
   bundle,
   currentWallId,
+  compact = false,
 }: {
   bundle: BundleDrawing;
   currentWallId?: string;
+  compact?: boolean;
 }) {
   const stored = hasStoredLayout(bundle),
     ordered = orderedLayoutMembers(bundle);
@@ -80,10 +82,13 @@ export function BundleOutline({
   if (!stored && !value)
     return (
       <div
-        className="grid min-h-[50vh] place-content-center gap-3 p-8 text-center"
+        className={
+          "grid place-content-center gap-3 text-center " +
+          (compact ? "min-h-32 p-3 text-sm" : "min-h-[50vh] p-8")
+        }
         role="status"
       >
-        <h3 className="text-3xl font-black">
+        <h3 className={(compact ? "text-base" : "text-3xl") + " font-black"}>
           {failure?.key === sourceKey
             ? "Stack outline unavailable"
             : "Drawing the stack outline…"}
@@ -125,7 +130,7 @@ export function BundleOutline({
     <svg
       role="img"
       aria-label={"Stacking outline for " + bundle.bundle_id}
-      className="h-full min-h-[45vh] w-full"
+      className={"h-full w-full " + (compact ? "min-h-32" : "min-h-[45vh]")}
       viewBox={scene.viewBox}
       preserveAspectRatio="xMidYMid meet"
     >

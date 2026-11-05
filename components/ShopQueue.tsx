@@ -2,20 +2,36 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, MoveRight, RotateCcw, ShieldCheck, SkipForward, X } from "lucide-react";
+import {
+  CheckCircle2,
+  MoveRight,
+  RotateCcw,
+  ShieldCheck,
+  SkipForward,
+  X,
+} from "lucide-react";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { WallNotesButton } from "@/components/WallNotesButton";
 import { ZoomableDrawing } from "@/components/ZoomableDrawing";
 import { createClient } from "@/lib/supabase-browser";
+import { wallBundle, type ProductionQueueWall } from "@/lib/production-queue";
 import type { ProductionLine, Profile, Project } from "@/lib/types";
 
-type JoinedPage = { page_number: number; image_url: string } | { page_number: number; image_url: string }[] | null;
-type JoinedProject = { name: string; code: string } | { name: string; code: string }[] | null;
-type JoinedNote = { markup_data: unknown; note_text: string | null } | { markup_data: unknown; note_text: string | null }[] | null;
+type JoinedPage =
+  | { page_number: number; image_url: string }
+  | { page_number: number; image_url: string }[]
+  | null;
+type JoinedProject =
+  { name: string; code: string } | { name: string; code: string }[] | null;
+type JoinedNote =
+  | { markup_data: unknown; note_text: string | null }
+  | { markup_data: unknown; note_text: string | null }[]
+  | null;
 type QaqcChecks = Record<string, boolean>;
 
 type QueueWall = {
+  bundle_panels?: ProductionQueueWall["bundle_panels"];
   id: string;
   project_id: string;
   wall_id: string;
@@ -42,7 +58,7 @@ const QAQC_ITEMS = [
   { id: "wain_down_top_plate", label: "Wain down on top plate" },
   { id: "wain_out_window_sill", label: "Wain out on window sill" },
   { id: "correct_poly_lap", label: "Correct poly lap" },
-  { id: "correct_label", label: "Correct label" }
+  { id: "correct_label", label: "Correct label" },
 ];
 
 export function ShopQueue({
@@ -52,7 +68,7 @@ export function ShopQueue({
   activeLineId,
   activeProjectId,
   walls,
-  lastCompletedWall
+  lastCompletedWall,
 }: {
   profile: Profile;
   lines: ProductionLine[];
@@ -62,18 +78,46 @@ export function ShopQueue({
   walls: QueueWall[];
   lastCompletedWall: QueueWall | null;
 }) {
+  const router = useRouter();
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const timer = setInterval(refresh, 5000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [router]);
   const activeWall = walls[0] ?? null;
   const nextWalls = walls.slice(1, 6);
-  const activeProject = projects.find((project) => project.id === activeProjectId);
+  const activeProject = projects.find(
+    (project) => project.id === activeProjectId,
+  );
 
   return (
     <div className="grid gap-6">
       <div className="grid gap-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Link target="_blank" rel="noreferrer" href={"/yard?line="+encodeURIComponent(activeLineId)+"&project="+encodeURIComponent(activeProjectId)} className="touch-target inline-flex items-center text-lg font-bold text-steel underline">Open stacking display</Link>
+            <Link
+              target="_blank"
+              rel="noreferrer"
+              href={
+                "/yard?line=" +
+                encodeURIComponent(activeLineId) +
+                "&project=" +
+                encodeURIComponent(activeProjectId)
+              }
+              className="touch-target inline-flex items-center text-lg font-bold text-steel underline"
+            >
+              Open stacking display
+            </Link>
             <p className="text-lg font-bold text-steel">Production queue</p>
-            <h1 className="text-4xl font-black text-ink">Current wall drawing</h1>
+            <h1 className="text-4xl font-black text-ink">
+              Current wall drawing
+            </h1>
           </div>
           <div className="flex gap-2 overflow-x-auto rounded-md bg-white p-2 shadow-touch">
             {lines.map((line) => (
@@ -81,7 +125,9 @@ export function ShopQueue({
                 key={line.id}
                 href={shopHref(line.id, activeProjectId)}
                 className={`touch-target rounded-md px-5 py-3 text-lg font-black ${
-                  line.id === activeLineId ? "bg-ink text-white" : "bg-slate-100 text-ink"
+                  line.id === activeLineId
+                    ? "bg-ink text-white"
+                    : "bg-slate-100 text-ink"
                 }`}
               >
                 {line.name}
@@ -94,15 +140,23 @@ export function ShopQueue({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold uppercase text-steel">Project</p>
-              <h2 className="text-2xl font-black text-ink">{activeProject ? `${activeProject.code} - ${activeProject.name}` : "All projects"}</h2>
+              <h2 className="text-2xl font-black text-ink">
+                {activeProject
+                  ? `${activeProject.code} - ${activeProject.name}`
+                  : "All projects"}
+              </h2>
             </div>
-            <span className="rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink">{walls.length} waiting</span>
+            <span className="rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink">
+              {walls.length} waiting
+            </span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             <Link
               href={shopHref(activeLineId, "all")}
               className={`touch-target whitespace-nowrap rounded-md px-5 py-3 text-lg font-black ${
-                activeProjectId === "all" ? "bg-ink text-white" : "bg-slate-100 text-ink"
+                activeProjectId === "all"
+                  ? "bg-ink text-white"
+                  : "bg-slate-100 text-ink"
               }`}
             >
               All projects
@@ -112,7 +166,9 @@ export function ShopQueue({
                 key={project.id}
                 href={shopHref(activeLineId, project.id)}
                 className={`touch-target whitespace-nowrap rounded-md px-5 py-3 text-lg font-black ${
-                  project.id === activeProjectId ? "bg-ink text-white" : "bg-slate-100 text-ink"
+                  project.id === activeProjectId
+                    ? "bg-ink text-white"
+                    : "bg-slate-100 text-ink"
                 }`}
               >
                 {project.code}
@@ -139,9 +195,15 @@ export function ShopQueue({
                   const project = firstJoined(wall.projects);
                   return (
                     <div key={wall.id} className="rounded-md bg-slate-100 p-4">
-                      <p className="text-2xl font-black text-ink">{wall.wall_id}</p>
-                      <p className="text-lg font-bold text-steel">{project?.code} / {wall.level}</p>
-                      <p className="text-lg font-bold text-steel">{wall.wall_type} / {wall.lineal_feet.toFixed(1)} LF</p>
+                      <p className="text-2xl font-black text-ink">
+                        {wall.wall_id}
+                      </p>
+                      <p className="text-lg font-bold text-steel">
+                        {project?.code} / {wall.level}
+                      </p>
+                      <p className="text-lg font-bold text-steel">
+                        {wall.wall_type} / {wall.lineal_feet.toFixed(1)} LF
+                      </p>
                     </div>
                   );
                 })}
@@ -151,9 +213,18 @@ export function ShopQueue({
         </>
       ) : (
         <section className="rounded-md bg-white p-10 text-center shadow-touch">
-          <h2 className="text-3xl font-black text-ink">No walls waiting here</h2>
-          <p className="mt-2 text-xl text-steel">Switch project or line to find the next wall drawing.</p>
-          {lastCompletedWall ? <UndoWallButton wall={lastCompletedWall} className="mx-auto mt-6 max-w-xl" /> : null}
+          <h2 className="text-3xl font-black text-ink">
+            No walls waiting here
+          </h2>
+          <p className="mt-2 text-xl text-steel">
+            Switch project or line to find the next wall drawing.
+          </p>
+          {lastCompletedWall ? (
+            <UndoWallButton
+              wall={lastCompletedWall}
+              className="mx-auto mt-6 max-w-xl"
+            />
+          ) : null}
         </section>
       )}
     </div>
@@ -165,7 +236,7 @@ function ActiveWall({
   profile,
   remainingCount,
   activeProjectId,
-  lastCompletedWall
+  lastCompletedWall,
 }: {
   wall: QueueWall;
   profile: Profile;
@@ -195,15 +266,17 @@ function ActiveWall({
     setBusy(true);
     setMessage("");
     const supabase = createClient();
-    const { error: checkError } = await supabase.from("wall_qaqc_checks").upsert(
-      {
-        wall_panel_id: wall.id,
-        checklist: checks,
-        checked_by: profile.id,
-        checked_at: new Date().toISOString()
-      },
-      { onConflict: "wall_panel_id" }
-    );
+    const { error: checkError } = await supabase
+      .from("wall_qaqc_checks")
+      .upsert(
+        {
+          wall_panel_id: wall.id,
+          checklist: checks,
+          checked_by: profile.id,
+          checked_at: new Date().toISOString(),
+        },
+        { onConflict: "wall_panel_id" },
+      );
 
     if (checkError) {
       setMessage(checkError.message);
@@ -213,7 +286,7 @@ function ActiveWall({
 
     const { error } = await supabase.rpc("complete_wall_panel", {
       p_wall_panel_id: wall.id,
-      p_completed_by: profile.id
+      p_completed_by: profile.id,
     });
     if (error) {
       setMessage(error.message);
@@ -238,6 +311,21 @@ function ActiveWall({
     setBusy(true);
     setMessage("");
     const supabase = createClient();
+    const bundle = wallBundle(wall);
+    if (bundle) {
+      const { error } = await supabase.rpc("move_production_bundle", {
+        p_bundle: bundle.id,
+        p_before: null,
+      });
+      if (error) {
+        setMessage(error.message);
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+      router.refresh();
+      return;
+    }
     let maxQuery = supabase
       .from("wall_panels")
       .select("sort_order")
@@ -246,7 +334,8 @@ function ActiveWall({
       .order("sort_order", { ascending: false })
       .limit(1);
 
-    if (activeProjectId !== "all") maxQuery = maxQuery.eq("project_id", wall.project_id);
+    if (activeProjectId !== "all")
+      maxQuery = maxQuery.eq("project_id", wall.project_id);
 
     const { data: maxRows, error: maxError } = await maxQuery;
     if (maxError) {
@@ -255,8 +344,12 @@ function ActiveWall({
       return;
     }
 
-    const nextSortOrder = Number(maxRows?.[0]?.sort_order ?? wall.sort_order) + 10;
-    const { error } = await supabase.from("wall_panels").update({ sort_order: nextSortOrder }).eq("id", wall.id);
+    const nextSortOrder =
+      Number(maxRows?.[0]?.sort_order ?? wall.sort_order) + 10;
+    const { error } = await supabase
+      .from("wall_panels")
+      .update({ sort_order: nextSortOrder })
+      .eq("id", wall.id);
     if (error) {
       setMessage(error.message);
       setBusy(false);
@@ -278,34 +371,69 @@ function ActiveWall({
         }}
         className="grid gap-5 overflow-hidden rounded-md border border-slate-200 bg-white p-5 shadow-touch xl:grid-cols-[minmax(0,1fr)_24rem]"
       >
-        <ZoomableDrawing imageUrl={page?.image_url} alt={`Drawing page ${page?.page_number ?? ""}`} className="min-h-[62vh]" markupData={note?.markup_data} noteText={note?.note_text} />
+        <ZoomableDrawing
+          imageUrl={page?.image_url}
+          alt={`Drawing page ${page?.page_number ?? ""}`}
+          className="min-h-[62vh]"
+          markupData={note?.markup_data}
+          noteText={note?.note_text}
+        />
 
         <aside className="grid content-between gap-5">
           <div className="grid gap-4">
             <div>
-              <p className="text-xl font-bold text-steel">{project?.code} / {wall.level}</p>
+              <p className="text-xl font-bold text-steel">
+                {project?.code} / {wall.level}
+              </p>
               <h2 className="text-6xl font-black text-ink">{wall.wall_id}</h2>
+              {wallBundle(wall) && (
+                <p className="text-lg font-bold text-shop">
+                  {wallBundle(wall)!.bundle_id} · bottom-to-top order
+                </p>
+              )}
             </div>
-            <span className="w-fit rounded-md bg-shop px-5 py-3 text-2xl font-black text-ink">{wall.wall_type}</span>
+            <span className="w-fit rounded-md bg-shop px-5 py-3 text-2xl font-black text-ink">
+              {wall.wall_type}
+            </span>
             <div className="grid grid-cols-3 gap-3">
               <Metric label="Lineal feet" value={wall.lineal_feet.toFixed(1)} />
-              <Metric label="Page" value={page ? String(page.page_number) : "-"} />
+              <Metric
+                label="Page"
+                value={page ? String(page.page_number) : "-"}
+              />
               <Metric label="Queue" value={String(remainingCount)} />
             </div>
           </div>
 
           <div className="grid gap-3">
             <div className="grid gap-3 md:grid-cols-2">
-              {lastCompletedWall ? <UndoWallButton wall={lastCompletedWall} /> : null}
+              {lastCompletedWall ? (
+                <UndoWallButton wall={lastCompletedWall} />
+              ) : null}
               <button
                 onClick={skipWall}
-                disabled={busy}
+                disabled={
+                  busy || (!!wallBundle(wall) && profile.role === "shop_user")
+                }
                 className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <SkipForward size={30} /> {busy ? "Working..." : "Skip"}
+                <SkipForward size={30} />{" "}
+                {busy
+                  ? "Working..."
+                  : wallBundle(wall)
+                    ? "Defer bundle"
+                    : "Skip"}
               </button>
             </div>
-            <WallNotesButton wallId={wall.id} wallLabel={wall.wall_id} imageUrl={page?.image_url} pageLabel={project ? `${project.code} / ${wall.level}` : wall.level} onSaved={() => router.refresh()} />
+            <WallNotesButton
+              wallId={wall.id}
+              wallLabel={wall.wall_id}
+              imageUrl={page?.image_url}
+              pageLabel={
+                project ? `${project.code} / ${wall.level}` : wall.level
+              }
+              onSaved={() => router.refresh()}
+            />
             <button
               onClick={openQaqc}
               disabled={busy}
@@ -314,9 +442,14 @@ function ActiveWall({
               <ShieldCheck size={34} /> {busy ? "Completing..." : "QA/QC First"}
             </button>
             <p className="flex items-center gap-2 text-xl font-bold text-steel">
-              <MoveRight size={24} /> Swipe drawing right to open QA/QC. Pinch drawing to zoom.
+              <MoveRight size={24} /> Swipe drawing right to open QA/QC. Pinch
+              drawing to zoom.
             </p>
-            {message ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{message}</p> : null}
+            {message ? (
+              <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">
+                {message}
+              </p>
+            ) : null}
           </div>
         </aside>
       </motion.article>
@@ -340,7 +473,7 @@ function QaqcModal({
   busy,
   error,
   onClose,
-  onComplete
+  onComplete,
 }: {
   wallLabel: string;
   pageLabel: string;
@@ -349,8 +482,13 @@ function QaqcModal({
   onClose: () => void;
   onComplete: (checks: QaqcChecks) => void;
 }) {
-  const [checks, setChecks] = useState<QaqcChecks>(() => Object.fromEntries(QAQC_ITEMS.map((item) => [item.id, false])));
-  const complete = useMemo(() => QAQC_ITEMS.every((item) => checks[item.id]), [checks]);
+  const [checks, setChecks] = useState<QaqcChecks>(() =>
+    Object.fromEntries(QAQC_ITEMS.map((item) => [item.id, false])),
+  );
+  const complete = useMemo(
+    () => QAQC_ITEMS.every((item) => checks[item.id]),
+    [checks],
+  );
   const checkedCount = QAQC_ITEMS.filter((item) => checks[item.id]).length;
 
   function toggle(id: string) {
@@ -363,10 +501,18 @@ function QaqcModal({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-lg font-bold text-steel">{pageLabel}</p>
-            <h2 className="text-4xl font-black text-ink">QA/QC for {wallLabel}</h2>
-            <p className="mt-1 text-xl font-bold text-steel">{checkedCount} of {QAQC_ITEMS.length} checked</p>
+            <h2 className="text-4xl font-black text-ink">
+              QA/QC for {wallLabel}
+            </h2>
+            <p className="mt-1 text-xl font-bold text-steel">
+              {checkedCount} of {QAQC_ITEMS.length} checked
+            </p>
           </div>
-          <button onClick={onClose} disabled={busy} className="touch-target rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink disabled:opacity-60">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="touch-target rounded-md bg-slate-100 px-4 py-3 text-lg font-black text-ink disabled:opacity-60"
+          >
             <X size={26} />
           </button>
         </div>
@@ -378,21 +524,33 @@ function QaqcModal({
               onClick={() => toggle(item.id)}
               disabled={busy}
               className={`touch-target flex items-center justify-between gap-4 rounded-md border-2 p-5 text-left text-2xl font-black disabled:opacity-60 ${
-                checks[item.id] ? "border-pass bg-green-50 text-ink" : "border-slate-200 bg-slate-100 text-ink"
+                checks[item.id]
+                  ? "border-pass bg-green-50 text-ink"
+                  : "border-slate-200 bg-slate-100 text-ink"
               }`}
             >
               <span>{item.label}</span>
-              <span className={`grid size-11 shrink-0 place-items-center rounded-md border-2 ${checks[item.id] ? "border-pass bg-pass text-white" : "border-slate-300 bg-white text-transparent"}`}>
+              <span
+                className={`grid size-11 shrink-0 place-items-center rounded-md border-2 ${checks[item.id] ? "border-pass bg-pass text-white" : "border-slate-300 bg-white text-transparent"}`}
+              >
                 <CheckCircle2 size={30} />
               </span>
             </button>
           ))}
         </div>
 
-        {error ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">{error}</p> : null}
+        {error ? (
+          <p className="rounded-md border border-red-200 bg-red-50 p-3 text-lg font-bold text-red-700">
+            {error}
+          </p>
+        ) : null}
 
         <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
-          <button onClick={onClose} disabled={busy} className="touch-target rounded-md bg-slate-100 px-6 py-5 text-2xl font-black text-ink disabled:opacity-60">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="touch-target rounded-md bg-slate-100 px-6 py-5 text-2xl font-black text-ink disabled:opacity-60"
+          >
             Back to wall
           </button>
           <button
@@ -400,7 +558,12 @@ function QaqcModal({
             disabled={busy || !complete}
             className="touch-target inline-flex items-center justify-center gap-3 rounded-md bg-pass px-6 py-5 text-3xl font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-steel"
           >
-            <CheckCircle2 size={34} /> {busy ? "Completing..." : complete ? "Complete" : "Check all items first"}
+            <CheckCircle2 size={34} />{" "}
+            {busy
+              ? "Completing..."
+              : complete
+                ? "Complete"
+                : "Check all items first"}
           </button>
         </div>
       </section>
@@ -408,7 +571,13 @@ function QaqcModal({
   );
 }
 
-function UndoWallButton({ wall, className = "" }: { wall: QueueWall; className?: string }) {
+function UndoWallButton({
+  wall,
+  className = "",
+}: {
+  wall: QueueWall;
+  className?: string;
+}) {
   const router = useRouter();
   const project = firstJoined(wall.projects);
   const [busy, setBusy] = useState(false);
@@ -420,7 +589,7 @@ function UndoWallButton({ wall, className = "" }: { wall: QueueWall; className?:
     setMessage("");
     const supabase = createClient();
     const { error } = await supabase.rpc("undo_wall_completion", {
-      p_wall_panel_id: wall.id
+      p_wall_panel_id: wall.id,
     });
     if (!error) {
       router.refresh();
@@ -438,9 +607,15 @@ function UndoWallButton({ wall, className = "" }: { wall: QueueWall; className?:
         className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"
       >
         <RotateCcw size={30} />
-        {busy ? "Restoring..." : `Go back ${project?.code ? `${project.code} / ` : ""}${wall.wall_id}`}
+        {busy
+          ? "Restoring..."
+          : `Go back ${project?.code ? `${project.code} / ` : ""}${wall.wall_id}`}
       </button>
-      {message ? <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">{message}</p> : null}
+      {message ? (
+        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-base font-bold text-red-700">
+          {message}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -462,5 +637,5 @@ function shopHref(lineId: string, projectId: string) {
 
 function firstJoined<T>(value: T | T[] | null) {
   if (!value) return null;
-  return Array.isArray(value) ? value[0] ?? null : value;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
 }

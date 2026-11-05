@@ -112,7 +112,7 @@ Existing production-only imports remain available. Project/level/page and
 project/level/wall identities prevent another level from replacing earlier pages
 or cards. Already imported joint packages cannot be overwritten through either
 uploader; drawing-revision replacement is a separate future task.
-The authentic user-supplied MillCo_Circle_Dark.svg now supplies the app icon, favicon, home-screen icons, header and sign-in logo. Original SVG paths are unchanged; raster icons keep the logo’s white interior with transparency outside its circular edge.
+The authentic user-supplied MillCo_Circle_Dark.svg now supplies the app icon, favicon, home-screen icons, header and sign-in logo. Original SVG paths are unchanged; raster icons keep the logoâ€™s white interior with transparency outside its circular edge.
 
 Run pnpm test, pnpm typecheck, and pnpm build. Build scripts copy the installed
 PDF.js library and matching worker into public/pdfjs. See DEPLOYMENT.md.
@@ -129,3 +129,9 @@ schema path until bundle setup is complete.
 Yard follows the selected production line and job, displaying only the bundle containing the current wall. It automatically traces wall bodies from the Complete Bundle Report and labels them using original production-drawing order. Outline counts and relative widths must match production dimensions; bundle-report footage never enters LF calculations. No outline approval is required. Unsupported layouts show a retry/edit message instead of guessed positions.
 
 Walls fill orange on production completion. Completed bundle names appear at the bottom in bundle-number order and open their outline when selected. Full screen is intended for the second monitor at the end of the line; it refreshes every five seconds. PDFs are not displayed on this screen. Optional shape adjustments and existing physical Yard records are available under `/yard/setup`. Production completion and physical stacking remain separate.
+
+### Bundle production plan
+
+Apply `20261105183838_bundle_production_order.sql` before deploying the bundle planner. Yard shows every upcoming bundle in the selected job, with drag, Make next and up/down scheduling controls for supervisors/admins. Priority is shared across both production lines; line assignments remain unchanged. Shop and Yard refresh every five seconds.
+
+Shop groups walls by persisted bundle priority and uses original drawing-page order within each bundle (bottom to top). Completing a wall removes it from the pending sequence; undo returns it to its original position within the same bundle. Moving a bundle changes no completion, LF, stacking, or wall-position records. Future imports append to the plan. Legacy walls without bundle membership retain their per-wall queue and Skip control. For bundled walls, supervisors can Defer bundle as a whole. Individual wall skipping cannot split the stack sequence. Completed bundle labels remain in bundle-number order.

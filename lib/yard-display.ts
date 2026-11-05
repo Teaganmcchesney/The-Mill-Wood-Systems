@@ -25,6 +25,7 @@ export type BundleDrawing = {
   bundle_pdf_url: string;
   expected_count: number;
   stacked_at: string | null;
+  production_order?: number | string;
   bundle_panels: BundleMember[];
 };
 export type QueueHead = {
@@ -60,22 +61,20 @@ export function activeBundle(bundles: BundleDrawing[], head: QueueHead | null) {
     : null;
 }
 export function orderedCompleted(bundles: BundleDrawing[]) {
-  return bundles
-    .filter(productionComplete)
-    .sort(
-      (a, b) =>
-        a.bundle_id.localeCompare(b.bundle_id, undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }) ||
-        (a.projects?.code ?? "").localeCompare(
-          b.projects?.code ?? "",
-          undefined,
-          { numeric: true },
-        ) ||
-        a.level.localeCompare(b.level, undefined, { numeric: true }) ||
-        a.id.localeCompare(b.id),
-    );
+  return bundles.filter(productionComplete).sort(
+    (a, b) =>
+      a.bundle_id.localeCompare(b.bundle_id, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }) ||
+      (a.projects?.code ?? "").localeCompare(
+        b.projects?.code ?? "",
+        undefined,
+        { numeric: true },
+      ) ||
+      a.level.localeCompare(b.level, undefined, { numeric: true }) ||
+      a.id.localeCompare(b.id),
+  );
 }
 export function outlineScene(bundle: BundleDrawing, aspect: number) {
   const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
@@ -123,4 +122,21 @@ export function orderedLayoutMembers(b: BundleDrawing) {
             b.wall_panels?.sort_order ??
             Infinity) || a.id.localeCompare(b.id),
     );
+}
+
+export function orderedUpcoming(bundles: BundleDrawing[]) {
+  return bundles
+    .filter((b) => !productionComplete(b))
+    .sort((a, b) => {
+      const rank = (bundle: BundleDrawing) =>
+        Number(
+          bundle.production_order ??
+            Math.min(
+              ...bundle.bundle_panels.map(
+                (p) => p.wall_panels?.sort_order ?? Infinity,
+              ),
+            ) * 100000,
+        );
+      return rank(a) - rank(b) || a.id.localeCompare(b.id);
+    });
 }

@@ -35,25 +35,26 @@ export default async function YardPage({
       "*, projects(code,name), bundle_panels(id,outline,verified_at,wall_panels(id,wall_id,status,lineal_feet,production_line_id,sort_order,updated_at,pdf_pages(page_number)))",
     )
     .order("bundle_id");
-  let headQuery = supabase
-    .from("wall_panels")
-    .select("id,wall_id,project_id,level,production_line_id,sort_order,status")
-    .eq("production_line_id", activeLine)
-    .neq("status", "complete")
-    .order("sort_order")
-    .order("id")
+  const headQuery = supabase
+    .rpc("production_queue", {
+      p_line: activeLine,
+      p_project: activeProject === "all" ? null : activeProject,
+    })
+    .select(
+      "id,wall_id,project_id,level,production_line_id,sort_order,status,pdf_pages(page_number),bundle_panels(bundles(id,bundle_id,production_order))",
+    )
     .limit(1);
   if (activeProject !== "all") {
     bundleQuery = bundleQuery.eq("project_id", activeProject);
-    headQuery = headQuery.eq("project_id", activeProject);
   }
-  const [{ data: bundles, error }, { data: heads }] = await Promise.all([
-    bundleQuery,
-    activeLine ? headQuery : Promise.resolve({ data: [] }),
-  ]);
+  const [{ data: bundles, error }, { data: heads, error: headError }] =
+    await Promise.all([
+      bundleQuery,
+      activeLine ? headQuery : Promise.resolve({ data: [], error: null }),
+    ]);
   return (
     <AppShell profile={profile}>
-      {error ? (
+      {error || headError ? (
         <p
           role="alert"
           className="rounded border border-orange-500 p-5 text-ink"
@@ -72,7 +73,11 @@ export default async function YardPage({
           }))}
           activeLine={activeLine}
           activeProject={activeProject}
-          head={(heads?.[0] ?? null) as QueueHead | null}
+          head={
+            (Array.isArray(heads)
+              ? (heads[0] ?? null)
+              : null) as QueueHead | null
+          }
           manager={profile.role !== "shop_user"}
         />
       )}

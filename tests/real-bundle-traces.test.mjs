@@ -26,6 +26,7 @@ for (const [name, dir, file, count] of [
     39,
   ],
   ["Rohit", process.env.ROHIT_REVIEW, process.env.ROHIT_BUNDLE_PDF, 18],
+  ["Parapet", process.env.PARAPET_REVIEW, process.env.PARAPET_BUNDLE_PDF, 5],
 ]) {
   if (!dir || !file) continue;
   test(

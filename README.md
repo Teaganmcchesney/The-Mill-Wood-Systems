@@ -138,6 +138,6 @@ Shop groups walls by persisted bundle priority and uses original drawing-page or
 
 ### Production package formats
 
-The joint importer accepts numeric bundle IDs (`B01-611-X1`) and level-coded IDs (`B01-L1-D1`). Wall LF comes only from each production header's Length field. Unreadable bundle IDs and wall lengths have separate page-specific error messages.
+The joint importer reads complete B-number bundle IDs with any number of alphanumeric suffixes, including `B01-P1`, `B01-611-X1`, and `B01-L1-D1`. Roof and parapet report headers require the Roof level; numbered levels keep their existing checks. Wall LF comes only from each production header's Length field. Unreadable bundle IDs and wall lengths have separate page-specific error messages.
 
-Yard uses the same bundle-ID reader. For panels rotated in a stack drawing, tracing may also compare against the panel Height from the production PDF; height is used only to validate the drawing orientation and never changes LF. Deeper wall cross-sections are included. Complete-package regression checks can be run with `CHINOOK_REVIEW`, `ROHIT_REVIEW`, and `ROHIT_BUNDLE_PDF` pointing to local review data; customer PDFs remain outside the repository.
+Yard uses the same bundle-ID reader. For panels rotated in a stack drawing, tracing may also compare against the panel Height from the production PDF; height is used only to validate the drawing orientation and never changes LF. Deeper wall cross-sections are included. Complete-package regression checks can be run with `CHINOOK_REVIEW`, `ROHIT_REVIEW`, and `ROHIT_BUNDLE_PDF`, `PARAPET_REVIEW`, and `PARAPET_BUNDLE_PDF` pointing to local review data; customer PDFs remain outside the repository.

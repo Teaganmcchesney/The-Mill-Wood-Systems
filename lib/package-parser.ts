@@ -28,9 +28,11 @@ export function productionHeightFeet(text: string): number | null {
   return height ? imperialFeet(height) : null;
 }
 export function bundleId(text: string) {
+  const header = text.split(/\bPanel\s*#/i)[0];
   return (
-    text.match(/\bB\d+-L?\d+-[A-Z0-9]+\b(?![A-Z0-9_.-])/i)?.[0].toUpperCase() ??
-    null
+    header
+      .match(/\bB\d+(?:-[A-Z0-9]+)*\b(?![A-Z0-9_./-])/i)?.[0]
+      .toUpperCase() ?? null
   );
 }
 export function parseProduction(texts: string[]): Panel[] {
@@ -140,7 +142,7 @@ export function validOutline(points: Point[]) {
   );
 }
 
-// Prevent a Level 6 package from being imported under the Admin page's default L1.
+// Validate the level named in the report header, including roof/parapet packages.
 export function validatePackageLevels(
   production: string[],
   bundles: string[],
@@ -149,7 +151,16 @@ export function validatePackageLevels(
   const levels = (texts: string[]) =>
     Array.from(
       new Set(
-        texts.map((t) => t.match(/\bLEVEL\s+(\d+)\b/i)?.[1]).filter(Boolean),
+        texts
+          .map((raw) => {
+            const header = raw
+              .replace(/\s+/g, " ")
+              .split(/\bPanel\s*#|\bLineal\s+Board/i)[0];
+            const numbered = header.match(/\bLEVEL\s+(\d+)\b/i)?.[1];
+            if (numbered) return "L" + numbered;
+            return /\b(?:ROOF|PARAPETS?)\b/i.test(header) ? "Roof" : null;
+          })
+          .filter((level): level is string => level !== null),
       ),
     );
   const a = levels(production),
@@ -159,12 +170,15 @@ export function validatePackageLevels(
   if (a[0] && b[0] && a[0] !== b[0])
     throw Error("The production and bundle reports are for different levels.");
   const detected = a[0] ?? b[0];
-  if (detected && selected.toUpperCase() !== "L" + detected)
+  if (detected && selected.toUpperCase() !== detected.toUpperCase()) {
+    const label =
+      detected === "Roof" ? "Roof/parapet" : "Level " + detected.slice(1);
     throw Error(
-      "These drawings are Level " +
-        detected +
-        ". Select L" +
+      "These drawings are " +
+        label +
+        ". Select " +
         detected +
         " before importing.",
     );
+  }
 }

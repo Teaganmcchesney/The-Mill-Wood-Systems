@@ -134,12 +134,21 @@ test("source levels agree with each other and selected level", () => {
   );
 });
 
-test("Rohit level-coded bundle IDs work alongside Chinook IDs without truncating unsupported IDs", () => {
+test("complete bundle IDs accept different segment counts without truncating malformed IDs", () => {
   assert.equal(bundleId("Panel Production B01-L1-D1 Level 1"), "B01-L1-D1");
   assert.equal(bundleId("Bundling b18-l1-x4 Level 1"), "B18-L1-X4");
   assert.equal(bundleId("B01-611-X1 Level 6"), "B01-611-X1");
-  for (const bad of ["B01-LX-D1", "B01-L1-D1-OTHER", "B01-L1-D1_EXTRA"])
+  for (const value of [
+    "B01",
+    "B01-P1",
+    "B01-ROOF-X1",
+    "B01-L1-D1-OTHER",
+    "B01-LX-D1",
+  ])
+    assert.equal(bundleId(value), value);
+  for (const bad of ["B01-L1-D1_EXTRA", "B01-P1-", "B01--P1", "B01/ROOF"])
     assert.equal(bundleId(bad), null);
+  assert.equal(bundleId("Panel #B01-P1 Length: 12' 0\""), null);
   const raw =
     'B01-L1-D1 Level 1 Panel #D33 Length: 11\' 1-5/8" Height: 9\' 1-1/8" First Stud Face @3-1/2"';
   const walls = parseProduction([raw]);
@@ -154,7 +163,7 @@ test("Rohit level-coded bundle IDs work alongside Chinook IDs without truncating
 });
 test("import errors identify the unreadable field and page separately", () => {
   assert.throws(
-    () => parseProduction([panel("D33", "1' 0\"", "B01-LX-D1")]),
+    () => parseProduction([panel("D33", "1' 0\"", "B01_LX_D1")]),
     /bundle ID.*D33.*page 1/,
   );
   assert.throws(
@@ -185,6 +194,72 @@ if (process.env.ROHIT_REVIEW) {
     assert.equal(bundles[0].count, 13);
     assert.ok(
       Math.abs(walls.reduce((s, p) => s + p.feet, 0) - 1550.2604166666667) <
+        1e-8,
+    );
+  });
+}
+
+test("parapet production headers and two-part bundle IDs import correctly", () => {
+  const text =
+    "Panel Production B01-P1 PARAPET CHINOOK NORTH 2026 Panel #X9 Length: 11' 11-15/16\" Height: 2' 0\" First Stud Face @1' 3-1/4\" Exterior Sheathing: Start: Flush";
+  const walls = parseProduction([text]);
+  assert.equal(walls[0].bundleId, "B01-P1");
+  assert.equal(walls[0].wallId, "X9");
+  assert.equal(walls[0].sheathed, true);
+  assert.equal(walls[0].feet, 11 + 11.9375 / 12);
+  assert.equal(
+    parseBundles(["B01-P1 PARAPET Sheathed (1): Total: ignored"], walls)[0]
+      .count,
+    1,
+  );
+});
+test("roof and parapet headers require Roof while numbered levels retain precedence", () => {
+  validatePackageLevels(
+    ["B01-P1 PARAPET Panel #X9"],
+    ["B01-P1 PARAPET Lineal Board"],
+    "Roof",
+  );
+  validatePackageLevels(["ROOF"], ["PARAPETS"], "roof");
+  assert.throws(
+    () => validatePackageLevels(["PARAPET"], ["PARAPET"], "L1"),
+    /Select Roof/,
+  );
+  assert.throws(
+    () => validatePackageLevels(["PARAPET"], ["LEVEL 6"], "Roof"),
+    /different levels/,
+  );
+  assert.throws(
+    () => validatePackageLevels(["PARAPET", "LEVEL 6"], ["PARAPET"], "Roof"),
+    /multi-level/,
+  );
+  validatePackageLevels(
+    ["LEVEL 6 Panel #X9 Parapet component note"],
+    ["LEVEL 6"],
+    "L6",
+  );
+});
+if (process.env.PARAPET_REVIEW) {
+  test("all real parapet pages reconcile under Roof without changing production LF", () => {
+    const dir = process.env.PARAPET_REVIEW,
+      production = JSON.parse(readFileSync(dir + "/production.json")),
+      report = JSON.parse(readFileSync(dir + "/bundles.json"));
+    validatePackageLevels(production, report, "Roof");
+    assert.throws(
+      () => validatePackageLevels(production, report, "L1"),
+      /Select Roof/,
+    );
+    const walls = parseProduction(production),
+      bundles = parseBundles(report, walls);
+    assert.equal(production.length, 46);
+    assert.equal(walls.length, 44);
+    assert.equal(bundles.length, 5);
+    assert.equal(walls[0].wallId, "X9");
+    assert.deepEqual(
+      bundles.map((b) => b.count),
+      [9, 11, 9, 11, 4],
+    );
+    assert.ok(
+      Math.abs(walls.reduce((s, w) => s + w.feet, 0) - 461.5520833333333) <
         1e-8,
     );
   });

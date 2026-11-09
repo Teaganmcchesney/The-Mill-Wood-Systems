@@ -315,7 +315,7 @@ test("joint package migration, rollback, level isolation, permissions and stacki
         39,
       );
     }
-    if (process.env.ROHIT_REVIEW) {
+    if (process.env.ROHIT_REVIEW || process.env.PARAPET_REVIEW) {
       // Verify the new format through the real transactional importer and queue trigger,
       // not just the text parser. Customer files remain outside the repository.
       await db.exec(
@@ -342,73 +342,89 @@ test("joint package migration, rollback, level isolation, permissions and stacki
       const { parseProduction, parseBundles } = await import(
         "data:text/javascript;base64," + Buffer.from(source).toString("base64")
       );
-      const dir = process.env.ROHIT_REVIEW,
-        raw = JSON.parse(readFileSync(dir + "/production.json")),
-        panels = parseProduction(raw),
-        report = parseBundles(
-          JSON.parse(readFileSync(dir + "/bundles.json")),
-          panels,
+      for (const [
+        dir,
+        level,
+        pageCount,
+        wallCount,
+        bundleCount,
+        expectedFeet,
+      ] of [
+        [process.env.ROHIT_REVIEW, "L1", 311, 232, 18, 1550.2604166666667],
+        [process.env.PARAPET_REVIEW, "Roof", 46, 44, 5, 461.5520833333333],
+      ]) {
+        if (!dir) continue;
+        const raw = JSON.parse(readFileSync(dir + "/production.json")),
+          panels = parseProduction(raw),
+          report = parseBundles(
+            JSON.parse(readFileSync(dir + "/bundles.json")),
+            panels,
+          );
+        await db.query("select import_joint_package($1,$2,$3,$4,$5)", [
+          project,
+          level,
+          JSON.stringify(
+            raw.map((_, i) => ({
+              page: i + 1,
+              image: "https://example.test/rohit-" + i + ".jpg",
+            })),
+          ),
+          JSON.stringify(
+            panels.map((p) => ({
+              ...p,
+              wallType: p.sheathed ? "Sheathed" : "Interior",
+              line,
+            })),
+          ),
+          JSON.stringify(
+            report.map((b) => ({
+              ...b,
+              image: "https://example.test/b.jpg",
+              productionPdfUrl: "https://example.test/p.pdf",
+              bundlePdfUrl: "https://example.test/b.pdf",
+            })),
+          ),
+        ]);
+        assert.equal(
+          (
+            await db.query(
+              "select count(*)::int n from wall_panels where level=$1",
+              [level],
+            )
+          ).rows[0].n,
+          wallCount,
         );
-      await db.query("select import_joint_package($1,$2,$3,$4,$5)", [
-        project,
-        "L1",
-        JSON.stringify(
-          raw.map((_, i) => ({
-            page: i + 1,
-            image: "https://example.test/rohit-" + i + ".jpg",
-          })),
-        ),
-        JSON.stringify(
-          panels.map((p) => ({
-            ...p,
-            wallType: p.sheathed ? "Sheathed" : "Interior",
-            line,
-          })),
-        ),
-        JSON.stringify(
-          report.map((b) => ({
-            ...b,
-            image: "https://example.test/b.jpg",
-            productionPdfUrl: "https://example.test/p.pdf",
-            bundlePdfUrl: "https://example.test/b.pdf",
-          })),
-        ),
-      ]);
-      assert.equal(
-        (
-          await db.query(
-            "select count(*)::int n from wall_panels where level='L1'",
-          )
-        ).rows[0].n,
-        232,
-      );
-      assert.equal(
-        (
-          await db.query(
-            "select count(*)::int n from pdf_pages where level='L1'",
-          )
-        ).rows[0].n,
-        311,
-      );
-      assert.equal(
-        (
-          await db.query(
-            "select count(*)::int n from bundles where level='L1' and production_order is not null",
-          )
-        ).rows[0].n,
-        18,
-      );
-      assert.ok(
-        Math.abs(
-          Number(
-            (
-              await db.query(
-                "select sum(lineal_feet) feet from wall_panels where level='L1'",
-              )
-            ).rows[0].feet,
-          ) - 1550.2604166666667,
-        ) < 0.0002,
-      );
+        assert.equal(
+          (
+            await db.query(
+              "select count(*)::int n from pdf_pages where level=$1",
+              [level],
+            )
+          ).rows[0].n,
+          pageCount,
+        );
+        assert.equal(
+          (
+            await db.query(
+              "select count(*)::int n from bundles where level=$1 and production_order is not null",
+              [level],
+            )
+          ).rows[0].n,
+          bundleCount,
+        );
+        assert.ok(
+          Math.abs(
+            Number(
+              (
+                await db.query(
+                  "select sum(lineal_feet) feet from wall_panels where level=$1",
+                  [level],
+                )
+              ).rows[0].feet,
+            ) - expectedFeet,
+          ) < 0.0002,
+        );
+      }
     }
   } finally {
     await db.close();

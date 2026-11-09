@@ -109,7 +109,7 @@ export function AdminPanel({
   }
 
   return (
-    <div className="grid gap-6">
+    <div data-app-update-blocked={!!projectBusy||!!newProject.code||!!newProject.name} className="grid gap-6">
       <div>
         <p className="text-lg font-bold text-steel">Admin workspace</p>
         <h1 className="text-4xl font-black text-ink">Projects, drawing packages, and imported walls</h1>
@@ -364,7 +364,7 @@ function PdfUploader({ projectId, level, lines, onDone }: { projectId: string; l
   }
 
   return (
-    <div className="grid gap-3">
+    <div data-app-update-blocked={!!busy} className="grid gap-3">
       <label className="touch-target inline-flex cursor-pointer items-center justify-center gap-3 rounded-md border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-5 text-xl font-black text-ink">
         <FileUp size={28} /> {busy || `Upload ${level} PDF drawing package`}
         <input

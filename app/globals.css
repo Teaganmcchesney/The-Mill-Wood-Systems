@@ -138,7 +138,7 @@ option {
   object-fit: contain;
 }
 
-.yard-screen:fullscreen {
+.yard-screen:fullscreen, .yard-screen.yard-resumed-display {
  background: #050505;
  width: 100vw;
  height: 100vh;
@@ -147,5 +147,7 @@ option {
 }
 .yard-outline-dialog::backdrop { background: rgba(0,0,0,.88); }
 
-.yard-screen:fullscreen .upcoming-grid {display:flex;overflow-x:auto;max-height:38vh;}
-.yard-screen:fullscreen .bundle-schedule-card {min-width:340px;max-width:420px;overflow-y:auto;}
+.yard-screen:fullscreen .upcoming-grid, .yard-resumed-display .upcoming-grid {display:flex;overflow-x:auto;max-height:38vh;}
+.yard-screen:fullscreen .bundle-schedule-card, .yard-resumed-display .bundle-schedule-card {min-width:340px;max-width:420px;overflow-y:auto;}
+
+.yard-screen.yard-resumed-display {position:fixed;inset:0;z-index:40;}

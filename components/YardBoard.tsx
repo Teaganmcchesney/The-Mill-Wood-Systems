@@ -50,6 +50,8 @@ export function YardBoard({ walls }: { walls: YardWall[] }) {
   const bundles = useMemo(() => groupByBundle(filteredRows, drafts), [filteredRows, drafts]);
   const totalFeet = filteredRows.reduce((sum, wall) => sum + Number(wall.lineal_feet), 0);
 
+  const normalize=(draft:YardDraft)=>({...draft,bundle_label:draft.bundle_label.trim(),yard_location:draft.yard_location.trim(),yard_notes:draft.yard_notes.trim()});
+  const dirty=rows.some(w=>JSON.stringify(normalize(drafts[w.id]??draftFromWall(w)))!==JSON.stringify(normalize(draftFromWall(w))));
   function updateDraft(id: string, patch: Partial<YardDraft>) {
     setDrafts((current) => ({ ...current, [id]: { ...(current[id] ?? emptyDraft()), ...patch } }));
   }
@@ -77,7 +79,7 @@ export function YardBoard({ walls }: { walls: YardWall[] }) {
   }
 
   return (
-    <div className="grid gap-6">
+    <div data-app-update-blocked={!!savingId||dirty} className="grid gap-6">
       <div>
         <p className="text-lg font-bold text-steel">Yard</p>
         <h1 className="text-4xl font-black text-ink">Completed walls and bundles</h1>

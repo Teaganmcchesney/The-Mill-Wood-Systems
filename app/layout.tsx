@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AppAutoUpdate } from "@/components/AppAutoUpdate";
 
 export const metadata: Metadata = {
   title: "The Mill Wall Tracker",
@@ -11,7 +12,9 @@ export const metadata: Metadata = {
       { url: "/favicon.ico?v=circle-2" },
       { url: "/favicon-32.png?v=circle-2", type: "image/png", sizes: "32x32" },
     ],
-    apple: [{ url: "/icon-180.png?v=circle-2", sizes: "180x180", type: "image/png" }],
+    apple: [
+      { url: "/icon-180.png?v=circle-2", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 
@@ -29,7 +32,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <AppAutoUpdate />
+      </body>
     </html>
   );
 }

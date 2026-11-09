@@ -141,3 +141,11 @@ Shop groups walls by persisted bundle priority and uses original drawing-page or
 The joint importer reads complete B-number bundle IDs with any number of alphanumeric suffixes, including `B01-P1`, `B01-611-X1`, and `B01-L1-D1`. Roof and parapet report headers require the Roof level; numbered levels keep their existing checks. Wall LF comes only from each production header's Length field. Unreadable bundle IDs and wall lengths have separate page-specific error messages.
 
 Yard uses the same bundle-ID reader. For panels rotated in a stack drawing, tracing may also compare against the panel Height from the production PDF; height is used only to validate the drawing orientation and never changes LF. Deeper wall cross-sections are included. Complete-package regression checks can be run with `CHINOOK_REVIEW`, `ROHIT_REVIEW`, and `ROHIT_BUNDLE_PDF`, `PARAPET_REVIEW`, and `PARAPET_BUNDLE_PDF` pointing to local review data; customer PDFs remain outside the repository.
+
+### Automatic app updates
+
+Use `pnpm build` (or `node scripts/run-next.mjs build`) for release builds. The wrapper copies the matching PDF worker and compiles one fresh release identifier into the client and `/api/app-version`. The public version endpoint is dynamic and sends no-store headers; it exposes no job or user data. Direct `next build` bypasses release identification.
+
+Open apps check once per minute and when returning online or to the foreground. A release must be observed twice. The app reloads only after 15 seconds without interaction, with no upload, QA/QC dialog, notes/markup, dirty project/manpower/Yard edit, pending save, focused editor, or active pointer gesture. A fresh successful check is required before reload. Offline/failed checks retain the current app, and repeated failed reloads are throttled. URLs and signed-in sessions remain intact. A Yard monitor restores its viewport-filling layout after reload; native browser fullscreen still requires a browser-allowed user gesture.
+
+Staff must refresh once to receive this updater. Future releases apply automatically on the main production address. A fixed preview/deployment URL continues to refer to that particular deployment.

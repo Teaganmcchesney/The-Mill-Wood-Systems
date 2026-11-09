@@ -11,15 +11,17 @@ export function ShiftStart({ lines, shiftManpower }: { lines: ProductionLine[]; 
   const [shiftName, setShiftName] = useState("Day");
   const [crewCounts, setCrewCounts] = useState<Record<string, string>>(() => valuesFor(lines, shiftManpower, today, "Day", "crew"));
   const [shiftHours, setShiftHours] = useState<Record<string, string>>(() => valuesFor(lines, shiftManpower, today, "Day", "hours"));
+  const [savedValues,setSavedValues]=useState(()=>JSON.stringify({crewCounts,shiftHours}));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setCrewCounts(valuesFor(lines, shiftManpower, today, shiftName, "crew"));
-    setShiftHours(valuesFor(lines, shiftManpower, today, shiftName, "hours"));
+    const crewCounts=valuesFor(lines,shiftManpower,today,shiftName,"crew"),shiftHours=valuesFor(lines,shiftManpower,today,shiftName,"hours");
+    setCrewCounts(crewCounts);setShiftHours(shiftHours);setSavedValues(JSON.stringify({crewCounts,shiftHours}));
   }, [lines, shiftManpower, shiftName, today]);
 
   async function saveAll() {
+    const submitted=JSON.stringify({crewCounts,shiftHours});
     setSaving(true);
     setMessage("");
     const supabase = createClient();
@@ -35,12 +37,13 @@ export function ShiftStart({ lines, shiftManpower }: { lines: ProductionLine[]; 
       .from("shift_manpower")
       .upsert(payload, { onConflict: "production_line_id,shift_date,shift_name" });
 
+    if(!error)setSavedValues(submitted);
     setSaving(false);
     setMessage(error ? error.message : "Shift manpower saved. You can start production.");
   }
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6">
+    <div data-app-update-blocked={saving||JSON.stringify({crewCounts,shiftHours})!==savedValues} className="mx-auto grid max-w-5xl gap-6">
       <section className="rounded-md bg-white p-6 shadow-touch">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">

@@ -166,7 +166,7 @@ function WallNotesModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid bg-black/80 p-4 lg:p-8">
+    <div role="dialog" aria-modal="true" data-app-update-blocked="true" className="fixed inset-0 z-50 grid bg-black/80 p-4 lg:p-8">
       <section className="grid max-h-full gap-4 overflow-hidden rounded-md bg-white p-5 shadow-touch lg:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="grid min-h-0 gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">

@@ -362,6 +362,7 @@ function ActiveWall({
   return (
     <>
       <motion.article
+        data-app-update-blocked={busy || qaqcOpen}
         drag={busy ? false : "x"}
         dragConstraints={{ left: 0, right: 260 }}
         style={{ x, background }}
@@ -496,7 +497,12 @@ function QaqcModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid bg-black/80 p-4 lg:p-8">
+    <div
+      role="dialog"
+      aria-modal="true"
+      data-app-update-blocked="true"
+      className="fixed inset-0 z-50 grid bg-black/80 p-4 lg:p-8"
+    >
       <section className="m-auto grid max-h-full w-full max-w-5xl gap-5 overflow-auto rounded-md bg-white p-5 shadow-touch">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -602,6 +608,7 @@ function UndoWallButton({
   return (
     <div className={`grid gap-2 ${className}`}>
       <button
+        data-app-update-blocked={busy}
         onClick={undoWall}
         disabled={busy}
         className="touch-target inline-flex w-full items-center justify-center gap-3 rounded-md bg-slate-100 px-6 py-4 text-2xl font-black text-ink disabled:cursor-not-allowed disabled:opacity-60"

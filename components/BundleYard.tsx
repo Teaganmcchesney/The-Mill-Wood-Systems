@@ -35,7 +35,17 @@ export function BundleYard({
     dialog = useRef<HTMLDialogElement>(null);
   const [selected, setSelected] = useState<string | null>(null),
     [fullscreen, setFullscreen] = useState(false),
+    [resumedDisplay, setResumedDisplay] = useState(false),
     [pending, startTransition] = useTransition();
+  useEffect(() => {
+    try {
+      const key = "mill:resume-yard-display";
+      if (sessionStorage.getItem(key) === location.pathname + location.search) {
+        setResumedDisplay(true);
+        sessionStorage.removeItem(key);
+      }
+    } catch {}
+  }, []);
   const current = activeBundle(bundles, head),
     completed = orderedCompleted(bundles);
   const opened = bundles.find((b) => b.id === selected);
@@ -65,6 +75,10 @@ export function BundleYard({
     startTransition(() => router.push("/yard?" + q));
   }
   async function toggleFullscreen() {
+    if (resumedDisplay) {
+      setResumedDisplay(false);
+      return;
+    }
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await screen.current?.requestFullscreen();
@@ -75,7 +89,10 @@ export function BundleYard({
   return (
     <section
       ref={screen}
-      className="yard-screen grid min-h-[calc(100vh-9rem)] grid-rows-[auto_1fr_auto_auto] gap-4 text-ink"
+      className={
+        "yard-screen grid min-h-[calc(100vh-9rem)] grid-rows-[auto_1fr_auto_auto] gap-4 text-ink " +
+        (resumedDisplay ? "yard-resumed-display" : "")
+      }
     >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -120,7 +137,7 @@ export function BundleYard({
               ))}
             </select>
           </label>
-          {manager && !fullscreen && (
+          {manager && !fullscreen && !resumedDisplay && (
             <Link
               className="touch-target grid place-items-center px-3 text-sm font-bold underline"
               href="/yard/setup"
@@ -132,7 +149,7 @@ export function BundleYard({
             className="touch-target rounded border border-orange-500 px-4 font-bold"
             onClick={() => void toggleFullscreen()}
           >
-            {fullscreen ? "Exit full screen" : "Full screen"}
+            {fullscreen || resumedDisplay ? "Exit full screen" : "Full screen"}
           </button>
         </div>
       </header>

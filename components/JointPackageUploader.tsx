@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import { missingBundleSetup, bundleSetupMessage } from "@/lib/bundle-setup";
 import { loadPdfJs } from "@/lib/pdf-browser";
@@ -59,6 +59,8 @@ export function JointPackageUploader({
     [bundles, setBundles] = useState<File | null>(null);
   const [busy, setBusy] = useState(""),
     [message, setMessage] = useState("");
+  const productionInput = useRef<HTMLInputElement>(null),
+    bundleInput = useRef<HTMLInputElement>(null);
   async function upload() {
     if (!production || !bundles || !projectId || !lines.length) return;
     setBusy("Checking upload setup…");
@@ -176,6 +178,10 @@ export function JointPackageUploader({
           report.length +
           " bundles. Stacking outlines and production order are available in Yard.",
       );
+      setProduction(null);
+      setBundles(null);
+      if (productionInput.current) productionInput.current.value = "";
+      if (bundleInput.current) bundleInput.current.value = "";
       onDone();
     } catch (e) {
       setMessage(
@@ -192,7 +198,10 @@ export function JointPackageUploader({
     }
   }
   return (
-    <div className="grid gap-3 text-ink rounded-md border-2 border-orange-400 p-4">
+    <div
+      data-app-update-blocked={!!busy || !!production || !!bundles}
+      className="grid gap-3 text-ink rounded-md border-2 border-orange-400 p-4"
+    >
       <h3 className="text-xl font-black">Production + bundle drawings</h3>
       <p>
         Production drawings supply wall lengths. The bundle report links walls
@@ -202,6 +211,7 @@ export function JointPackageUploader({
       <label className="grid gap-2 font-bold">
         Production drawings
         <input
+          ref={productionInput}
           disabled={!!busy}
           type="file"
           accept="application/pdf"
@@ -213,6 +223,7 @@ export function JointPackageUploader({
       <label className="grid gap-2 font-bold">
         Complete Bundle Report
         <input
+          ref={bundleInput}
           disabled={!!busy}
           type="file"
           accept="application/pdf"

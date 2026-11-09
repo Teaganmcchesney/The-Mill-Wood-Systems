@@ -167,7 +167,10 @@ function BundleCard({
     }
   }
   return (
-    <article className="grid gap-4 rounded-md bg-white p-5 shadow-touch">
+    <article
+      data-app-update-blocked={busy || !!selected}
+      className="grid gap-4 rounded-md bg-white p-5 shadow-touch"
+    >
       <div className="flex flex-wrap justify-between gap-3">
         <div>
           <h3 className="text-2xl font-black">
